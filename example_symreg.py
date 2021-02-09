@@ -61,7 +61,6 @@ if __name__ == "__main__":
 
     # problems
     pagie = "add(div(scalar(1.0), add(scalar(1.0), div(scalar(1.0), mult(mult(x, x), mult(x, x))))), div(scalar(1.0), add(scalar(1.0), div(scalar(1.0), mult(mult(y, y), mult(y, y))))))"
-    target= 'add(div(scalar(1.0), add(scalar(1.0), mult(mult(x, x), mult(x, x)))), div(scalar(1.0), add(scalar(1.0), mult(mult(y, y), mult(y, y)))))'
     keijzer11 = "add(mult(x, y), sin(mult(sub(x, scalar(1.0), sub(y, scalar(1.0)))))"
     korns3 = "add(scalar(-5.41), mult(scalar(4.9), div(sub(v, add(x, div(y, w))), mult(scalar(3.0, w)))))"
 
