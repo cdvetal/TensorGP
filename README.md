@@ -8,7 +8,7 @@ TensorGP is a general-purpose Genetic Programming engine that uses TensorFlow wi
 Import the engine with:
 
 ```python
-from engine import *
+from tensorgp.engine import *
 ```
 
 You can use the [pip](https://pip.pypa.io/en/stable/) package manager to install the list of dependencies provided in "requirements.txt":
