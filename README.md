@@ -1,5 +1,5 @@
 # TensorGP
-**A vectorized approach to Genetic Programming**
+**A data parallel approach to Genetic Programming**
 
 TensorGP is a general-purpose Genetic Programming engine that uses TensorFlow with Python to accelerate fitness evaluation through operator vectorization.
 
