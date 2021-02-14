@@ -40,8 +40,8 @@ my_fset = {'add', 'sub', 'mult', 'div', 'tan', 'sin', 'cos'}
 
 ```python
 engine = Engine(operators = m_fset,
-				... # other parameters,
-				)
+		... # other parameters,
+		)
 ```
 If you don't provide your own function set, the engine will default to using every operator that is implemented internally.
 To see a full list with all the operators that are supported out of the box or if you wish to write your own custom operator, refer to the "Features" section.
@@ -57,7 +57,7 @@ This function provides you with a bunch of engine variables that you may can acc
 def my_fitness_function(**kwargs):  
 	# read parameters  
 	population = kwargs.get('population')  
-    generation = kwargs.get('generation')
+    	generation = kwargs.get('generation')
 	
 	# loop through the population and assess fitness
 ```
@@ -118,7 +118,7 @@ You may tell the engine to save its state in each generation by setting the ```w
 Basic generational statistics are printed to the console for each generation in the experiment,
 as well as information regarding elapsed engine time:
 
-![Run](/images_dir/logo.png)
+![Run](/images_dir/gitrun.png)
 
 This basic information is saved as a CSV file in the main experiment directory.
 You may increase the verbosity of the information printed to the console with the ```debug``` parameter, which defaults to 0.
@@ -196,6 +196,7 @@ my_function_set = Function_Set(primitives)
 
 # Add rmse_node, which has 2 arguments with name "rmse"
 my_function_set.add_to_set("rmse", 2, rmse_node)
+
 # You can also remove operators from the set
 my_function_set-remove_from_set("mult")
 
