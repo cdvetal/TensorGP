@@ -118,14 +118,15 @@ You may tell the engine to save its state in each generation by setting the ```w
 Basic generational statistics are printed to the console for each generation in the experiment,
 as well as information regarding elapsed engine time:
 
-![]
+![Run](/images_dir/logo.png)
 
 This basic information is saved as a CSV file in the main experiment directory.
 You may increase the verbosity of the information printed to the console with the ```debug``` parameter, which defaults to 0.
 
 Additionally, you can also automatically generate graphics representing fitness and depth evolution across generations by setting ```save_graphics = True```.
 
-![]
+![Dep](/images_dir/Depth.png)
+![Fit](/images_dir/Fitness.png)
 
 Again, refer to the Parameterization section for a full list of parameters.
 
@@ -205,9 +206,46 @@ engine = Engine(operators=my_function_set,  ...)
 For a full list of TensorFlow primitives, check the official [website](https://www.tensorflow.org/api_docs/python/tf/all_symbols).
 
 ## Documentation
-This section documents primitive operators, available fitness arguments, available evolutionary methods, and GP parameters.
+This section documents implemented GP operators, recombination methods as well as parameterizations available for both the fitness function and the engine itself.
 
 ###  Internal Operators
+TensorGP provides an extensive set of operators that are immplemented out of box, along with the necessary protection mechanism. Not to be restricted to Symbolic Regression and Classification applications, several image specific operators such as step functions are also provided. 
+
+| Operator Name | Function | Arity | Type | Subtype | Functionality 
+|--|--|--|--|--|:--:|
+| add | Addition| 2 | Mathematical | Arithmetic | `x + y`
+| sub| Subtraction| 2 | Mathematical | Arithmetic | `x - y`
+| mult | Multiplication | 2 | Mathematical | Arithmetic | `x * y`
+| div | Division | 2 | Mathematical | Arithmetic | `x / y` <br> `0 if denominator is 0`
+| cos | Cosine | 1 | Mathematical | Trigonometric | `cos(pi * x)`
+| sin | Sine | 1 | Mathematical | Trigonometric | `sin(pi * x)`
+| tan | Tangent | 1 | Mathematical | Trigonometric | `tan(pi * x)`
+| exp | Exponential | 1 | Mathematical | Others | `e ^ x`
+| log | Logarithm | 1 | Mathematical | Others | `log(x)` <br> `-1 if x < 0`
+| abs | Abs | 1 | Mathematical | Others | `-x if x < 0` <br> `x if x > 0`
+| pow | Exponentiation | 2 | Mathematical | Others | `abs(x) ^ abs(y)` <br> `0 if x == 0`
+| min | Minimum | 2 | Mathematical | Others | `min(x, y)`
+| max | Maximum | 2 | Mathematical | Others | `max(x, y)`
+| mdist | Average | 2 | Mathematical | Others | `(x + y) / 2`
+| neg | Negative | 1 | Mathematical | Others | `-x`
+| sqrt | Square Root | 1 | Mathematical | Others | `sqrt(x)`
+| sign | Sign | 1 | Mathematical | Others | `-1 if x < 0` <br> `0 if x == 0` <br> `1 if x > 0`
+| clip | Constrain | 3 | Mathematical | Others | ensure `y <= x <= z` <br> or `max(min(z, x), y)`
+| mod | Modulo | 2 | Mathematical | Others | remainder of division <br> `x % y` 
+| frac | Fractional part | 1 | Mathematical | Others | `x - floor(x)`
+| if | Condition | 2 | Logic | Conditional | `if x then y else z`
+| or | OR | 2 | Logic | Bitwise | logic value of `x | y` <br> for all bits
+| xor | Exclusive OR | 2 | Logic | Bitwise | logic value of `x ^ y` <br> for all bits
+| and | AND | 2 | Logic | Bitwise | logic value of `x & y` <br> for all bits
+| warp | Warp | n | Image | Transform | Map data given input tensors [1]
+| step | Nomral | 1 | Image | Step | `-1 if x < 0` <br> `1 if x >= 0`
+| stepp | Smooth | 1 | Image | Step | `x^2(3-2*x)`
+| sstepp | Perlin Smooth | 1 | Image | Step | `x^3(x(6x - 15) + 10)`
+| len | Euclidean distance | 2 | Image | Color | `sqrt(x^2 + y^2)`
+| lerp | Linear Interpolation | 3 | Image | Color | `x + (y - z) * frac(z)`
+
+ [1] The warp operator is commonly used to deform images and is defined as a transformation that maps every element of a tensor to a different coordinate (two-dimensional warp is commonly to distort image shapes, see [Wikipedia](https://en.wikipedia.org/wiki/Image_warping)). This mapping is done according to an array of tensors with a size equal to the number of dimensions of the problem. Each of these tensors dictate where elements will end up within a given dimension. TensorGP implements a generalization of the warp operator in the sense that every dimensation is "warpable".
+
 ###  Fitness arguments
 List of engine variables that can be accessed by the fitness function through Python `**kwargs`:
 
