@@ -118,15 +118,14 @@ You may tell the engine to save its state in each generation by setting the ```w
 Basic generational statistics are printed to the console for each generation in the experiment,
 as well as information regarding elapsed engine time:
 
-![Run](/images_dir/gitrun.png)
+<img src="/images_dir/gitrun.png" alt="alt text" width="800">
 
 This basic information is saved as a CSV file in the main experiment directory.
 You may increase the verbosity of the information printed to the console with the ```debug``` parameter, which defaults to 0.
 
 Additionally, you can also automatically generate graphics representing fitness and depth evolution across generations by setting ```save_graphics = True```.
 
-![Dep](/images_dir/Depth.png)
-![Fit](/images_dir/Fitness.png)
+<img src="/images_dir/gitgraficos.png" alt="alt text">
 
 Again, refer to the Parameterization section for a full list of parameters.
 
