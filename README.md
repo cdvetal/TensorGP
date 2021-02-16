@@ -616,4 +616,5 @@ Authors of academic papers that use TensorGP for their experimenation are encour
 ## Contact
 
 In case you are having trouble with a specific experimental setup (and already read the documentation), or if you have any suggestion/feedback about TensorGP you may contact:
+
 **fjrbaeta@student.dei.uc.pt**
