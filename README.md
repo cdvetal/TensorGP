@@ -592,3 +592,28 @@ These are the possible parameters for the `Engine()` initialization.
   > 
   > Defines a text file containing expressions used to generate the individuals of the initial population.
   > If `None`, then the initial population will be randomly generated using the algorithm selected by the `method` parameter.
+  
+## Known Issues
+
+(as of 14/02/21)
+Be aware that TensorFlow is still in development and, as so, some issues are still not solved:
+
+- If your tensors are large or if you are evaluating a large number of individuals while executing in a GPU, it might happen that there TensorFlow raises an OOM error while trying to fit the entire tensor data in the GPU VRAM. Unfortunately, TensorFlow does not provide an effective way to batch the information to be sent to the GPU, limit VRAM usage nor clear the GPU VRAM with TF 2.x. For this reason, if you have this issue, your best bet is to use the CPU instead (device = `/cpu:0`).
+- Some machines might get an error while reading expressions from a file, a case in which you should add a blank space at the end of the file.
+
+## Citing this project
+Authors of academic papers that use TensorGP for their experimenation are encouraged to cite the following paper:
+```
+@inproceedings{baeta2021tensorgp,
+	title = {TensorGP -- Genetic Programming Engine in TensorFlow},
+	author = {Baeta, Francisco and Correia, Jo{\~{a}}o and Martins, Tiago and Machado, Penousal},
+	booktitle = {Applications of Evolutionary Computation - 24th International Conference, EvoApplications 2021},
+	year = {2021},
+	organization={Springer}
+}
+```
+
+## Contact
+
+In case you are having trouble with a specific experimental setup (and already read the documentation), or if you have any suggestion/feedback about TensorGP you may contact:
+**fjrbaeta@student.dei.uc.pt**
