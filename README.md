@@ -51,7 +51,7 @@ You may also check the Parameterization section to see all the available paramet
 
 This function will assess the quality of every individual in your population for every generation of the evolutionary process.
 For performance and flexibility concerns, you will have to loop through all individuals and calculate the fitness of each one, rather than defining how to assess each solution individually.
-This function provides you with a bunch of engine variables that you may can access through kwargs:
+This function provides you with a bunch of engine variables that you may access through kwargs:
 
 ```python
 def my_fitness_function(**kwargs):  
@@ -62,7 +62,7 @@ def my_fitness_function(**kwargs):
 	# loop through the population and assess fitness
 ```
 
-Check the files starting with **"example_"** to adapt a fitness function to your particular use case.
+Check the files starting with **"example_"** to adapt the fitness function to your particular use case.
 You may also check the Parameterization section for a list of all parameters that you can access through `kwargs`.
 
 After this function is defined, you simply pass it to the initial engine call as we did for the remaining parameters.
@@ -97,7 +97,7 @@ optimal_solution = tf.convert_to_tensor(numpy_target)
 engine = Engine(target=optimal_solution ,  ...)
 ```
 
-...or simply as an expression,  if that solution can be represented by the primitives defined by the orimitibe set you are using:
+...or simply as an expression,  if that solution can be represented by the primitives defined by the primitibe set you are using:
 
 
 ```python
@@ -129,7 +129,7 @@ Additionally, you can also automatically generate graphics representing fitness 
 
 Again, refer to the Parameterization section for a full list of parameters.
 
-### Custom Inital population
+### Custom Initial population
 
 TensorGP implements the traditional stochastic methods for generating the initial population, such as Ramped-half-and-half, grow, and full. However, you can also write your own initial population in a file and pass it to the engine:
 
@@ -209,7 +209,7 @@ For a full list of TensorFlow primitives, check the official [website](https://w
 This section documents implemented GP operators, recombination methods as well as parameterizations available for both the fitness function and the engine itself.
 
 ###  Internal Operators
-TensorGP provides an extensive set of operators that are immplemented out of box, along with the necessary protection mechanism. Not to be restricted to Symbolic Regression and Classification applications, several image specific operators such as step functions are also provided. 
+TensorGP provides an extensive set of operators that are implemented out of box, along with the necessary protection mechanism. Not to be restricted to Symbolic Regression and Classification applications, several image specific operators such as step functions are also provided. 
 
 | Operator Name | Function | Arity | Type | Subtype | Functionality 
 |--|--|--|--|--|:--:|
@@ -244,7 +244,7 @@ TensorGP provides an extensive set of operators that are immplemented out of box
 | len | Euclidean distance | 2 | Image | Color | `sqrt(x^2 + y^2)`
 | lerp | Linear Interpolation | 3 | Image | Color | `x + (y - z) * frac(z)`
 
- [1] The warp operator is commonly used to deform images and is defined as a transformation that maps every element of a tensor to a different coordinate (two-dimensional warp is commonly to distort image shapes, see [Wikipedia](https://en.wikipedia.org/wiki/Image_warping)). This mapping is done according to an array of tensors with a size equal to the number of dimensions of the problem. Each of these tensors dictate where elements will end up within a given dimension. TensorGP implements a generalization of the warp operator in the sense that every dimensation is "warpable".
+ [1] The warp operator is commonly used to deform images and is defined as a transformation that maps every element of a tensor to a different coordinate (two-dimensional warp is commonly to distort image shapes, see [Wikipedia](https://en.wikipedia.org/wiki/Image_warping)). This mapping is done according to an array of tensors with a size equal to the number of dimensions of the problem. Each of these tensors dictates where elements will end up within a given dimension. TensorGP implements a generalization of the warp operator that enables the mapping of any set of dimensions.
 
 ###  Fitness arguments
 List of engine variables that can be accessed by the fitness function through Python `**kwargs`:
@@ -317,7 +317,7 @@ List of engine variables that can be accessed by the fitness function through Py
 
 ### Evolutionary methods
 
-List of mutation and crossover operators currently available. These methods are part of TensorGP and are not supposed to be used outside of an `Engine()` object. To see how you can use different mutation methods and control different parameters, refer to the `mutation_funcs` and `mutation_probs` in the "GP parameters" subsection.
+The following is a list of mutation and crossover operators currently available. These methods are part of TensorGP and are not supposed to be used outside of an `Engine()` object. To see how you can use different mutation methods and control different parameters, refer to the `mutation_funcs` and `mutation_probs` in the "GP parameters" subsection.
 
   >`subtree_mutation`(_self_, _parent_):
   >
@@ -358,7 +358,7 @@ List of mutation and crossover operators currently available. These methods are 
 
   >`demotion_mutation`(_self_, _parent_):
   >
-  > : Selects a random node (either terminal or non-terminal), replacing it with a randomly selected primitive from the function set. One of the new nodes' children will the originally selected node, while the remaining children will be randomly generated terminals.
+  > : Selects a random node (either terminal or non-terminal), replacing it with a randomly selected primitive from the function set. One of the new nodes' children will be the originally selected node, while the remaining children will be randomly generated terminals.
   > On average, this method increases the number of nodes and possibly the depth when compared to the parent tree.
   > This is the opposite method to `promotion_mutation`.
   > 
@@ -416,7 +416,7 @@ These are the possible parameters for the `Engine()` initialization.
   >**mutation_funcs** (default=`None`): list of function pointers or `None`, optional
   >
   > Non-empty list of mutation methods to select from while mutation an individual.
-  > If `None`, the set of method to choose from will be the ones internally implemented by the engine
+  > If `None`, the set of methods to choose from will be the ones internally implemented by the engine
 
   >**mutation_probs** (default=`None`): list of floats or `None`, optional
   >
