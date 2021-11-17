@@ -725,6 +725,7 @@ class Engine:
         # optional vars
         self.recent_fitness_time = 0
         self.recent_tensor_time = 0
+        self.recent_engine_time = 0
         self.population_size = population_size
         self.tournament_size = tournament_size
         self.mutation_rate = mutation_rate
@@ -1123,6 +1124,7 @@ class Engine:
 
         return population, best_pop
 
+
     def write_pop_to_csv(self):
         if self.write_gen_stats:
             genstr = "gen_" + str(self.current_generation).zfill(5)
@@ -1215,9 +1217,10 @@ class Engine:
         data = []
         pops = self.population_stats(self.population)
         data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['nodes'][0], pops['nodes'][1], pops['nodes'][2]])
-        print(bcolors.BOLD + bcolors.OKCYAN + "\n[ gen,   fit avg,   fit std,  fit best,   dep avg,   dep std,  dep best,   nod avg,   nod std,  nod best]\n" , bcolors.ENDC)
+        print(bcolors.BOLD + bcolors.OKCYAN + "\n[ gen,   fit avg,   fit std,  fit best,   dep avg,   dep std,  dep best,   nod avg,   nod std,  nod best, gen time, fit time,tensor time]\n" , bcolors.ENDC)
         #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3], ",", data[-1][4], ",", data[-1][5], ",", data[-1][6], ",", data[-1][7], ",", data[-1][8], "]")
-        print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d]"%((self.current_generation,) + tuple(data[-1])) , bcolors.ENDC)
+        print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d, %9.6f, %9.6f, %9.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
+
 
         self.current_generation += 1
 
@@ -1312,7 +1315,9 @@ class Engine:
 
             #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3],
             #      ",", data[-1][4], ",", data[-1][5], ",", data[-1][6], ",", data[-1][7], ",", data[-1][8], "]")
-            print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d]"%((self.current_generation,) + tuple(data[-1])) , bcolors.ENDC)
+            #print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d]"%((self.current_generation,) + tuple(data[-1])) , bcolors.ENDC)
+            print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d, %9.6f, %9.6f, %9.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
+
 
             self.write_pop_to_csv()
 
@@ -1421,6 +1426,7 @@ class Engine:
     def update_engine_time(self):
         t_ = time.time()
         self.elapsed_engine_time += t_ - self.last_engine_time
+        self.recent_engine_time = t_ - self.last_engine_time
         self.last_engine_time = t_
 
     def save_state_to_file(self, filename):
