@@ -418,9 +418,9 @@ def set_device(device = '/gpu:0', debug_lvl = 1):
 # TODO: should this be an inner class of Engine()?
 class Experiment:
 
-    def set_experiment_filename(self):
+    def get_experiment_filename(self):
         date = datetime.datetime.utcnow().strftime('%Y_%m_%d__%H_%M_%S_%f')[:-3]
-        return "run__" + date + "__" + str(self.ID) + "__images"
+        return "run__" + date + "__" + str(self.ID)
 
     def set_generation_directory(self, generation):
         try:
@@ -438,7 +438,7 @@ class Experiment:
 
         self.ID = self.set_experiment_ID() if (previous_state is None) else previous_state['ID']
         self.seed = self.ID if (seed is None) else seed
-        self.filename = self.set_experiment_filename()
+        self.filename = self.get_experiment_filename() + "__images"
 
         try:
             self.working_directory = os.getcwd() + wd + self.filename + delimiter
@@ -666,6 +666,13 @@ class Engine:
 
     ## ====================== init class ====================== ##
 
+
+    def restart(self, new_stop = 10):
+        self.last_stop = self.stop_value
+        self.stop_value = self.stop_value - 1 + new_stop
+        self.save_state += 1
+        self.run()
+
     def __init__(self,
                  fitness_func = None,
                  population_size = 100,
@@ -705,6 +712,8 @@ class Engine:
                  save_to_file = 10,
                  write_log = True,
                  write_gen_stats = True,
+                 write_final_pop = False,
+                 path_to_final_pop = None,
                  initial_test_device = True,
                  previous_state = None,
                  var_func = None,
@@ -725,6 +734,7 @@ class Engine:
         # optional vars
         self.recent_fitness_time = 0
         self.recent_tensor_time = 0
+        self.recent_engine_time = 0
         self.population_size = population_size
         self.tournament_size = tournament_size
         self.mutation_rate = mutation_rate
@@ -756,7 +766,11 @@ class Engine:
         self.pop_file = read_init_pop_from_file
         self.write_log = write_log
         self.write_gen_stats = write_gen_stats
+        self.write_final_pop = write_final_pop
+        self.path_to_final_pop = self.experiment.current_directory if path_to_final_pop is None else path_to_final_pop
         #self.overall_stats_filename = 'overall_stats.csv'
+        self.save_state = 0
+        self.last_stop = 0
         self.overall_stats_filename = "tensorgp_" + str(self.target_dims[0]) + "_" + str(self.experiment.seed) + '.csv'
 
 
@@ -1123,6 +1137,7 @@ class Engine:
 
         return population, best_pop
 
+
     def write_pop_to_csv(self):
         if self.write_gen_stats:
             genstr = "gen_" + str(self.current_generation).zfill(5)
@@ -1215,9 +1230,10 @@ class Engine:
         data = []
         pops = self.population_stats(self.population)
         data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['nodes'][0], pops['nodes'][1], pops['nodes'][2]])
-        print(bcolors.BOLD + bcolors.OKCYAN + "\n[ gen,   fit avg,   fit std,  fit best,   dep avg,   dep std,  dep best,   nod avg,   nod std,  nod best]\n" , bcolors.ENDC)
+        print(bcolors.BOLD + bcolors.OKCYAN + "\n[ gen,   fit avg,   fit std,  fit best,   dep avg,   dep std,  dep best,   nod avg,   nod std,  nod best, gen time, fit time,tensor time]\n" , bcolors.ENDC)
         #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3], ",", data[-1][4], ",", data[-1][5], ",", data[-1][6], ",", data[-1][7], ",", data[-1][8], "]")
-        print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d]"%((self.current_generation,) + tuple(data[-1])) , bcolors.ENDC)
+        print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d, %9.6f, %9.6f, %9.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
+
 
         self.current_generation += 1
 
@@ -1312,7 +1328,9 @@ class Engine:
 
             #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3],
             #      ",", data[-1][4], ",", data[-1][5], ",", data[-1][6], ",", data[-1][7], ",", data[-1][8], "]")
-            print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d]"%((self.current_generation,) + tuple(data[-1])) , bcolors.ENDC)
+            #print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d]"%((self.current_generation,) + tuple(data[-1])) , bcolors.ENDC)
+            print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d, %9.6f, %9.6f, %9.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
+
 
             self.write_pop_to_csv()
 
@@ -1405,15 +1423,19 @@ class Engine:
     def write_stats_to_csv(self, data):
         fn = self.experiment.working_directory + self.overall_stats_filename
         #fn = os.getcwd() + delimiter + "runs" + delimiter + self.overall_stats_filename
-        with open(fn, mode='w', newline='') as file:
+        with open(fn, mode='a', newline='') as file:
             fwriter = csv.writer(file, delimiter=',')
             ind = 0
             for d in data:
-                if ind == 0:
+                if ind == 0 and self.save_state == 0:
                     file.write("[generation, fitness avg, fitness std, fitness best, depth avg, depth std, depth best]\n")
                 fwriter.writerow([ind] + d)
                 ind += 1
-            file.write("[resolution, seed, initialization time, tensor time, fitness time, total, engine time]\n")
+        fn = self.experiment.working_directory + "tensorgp_" + str(self.target_dims[0]) + "_" + str(self.experiment.seed) + '_timings.csv'
+        with open(fn, mode='a', newline='') as file:
+            fwriter = csv.writer(file, delimiter=',')
+            if self.save_state == 0:
+                file.write("[resolution, seed, initialization time, tensor time, fitness time, total, engine time]\n")
             fwriter.writerow([self.target_dims[0], self.experiment.seed, self.elapsed_init_time,
                               self.elapsed_tensor_time, self.elapsed_fitness_time, self.elapsed_engine_time])
 
@@ -1421,10 +1443,21 @@ class Engine:
     def update_engine_time(self):
         t_ = time.time()
         self.elapsed_engine_time += t_ - self.last_engine_time
+        self.recent_engine_time = t_ - self.last_engine_time
         self.last_engine_time = t_
 
     def save_state_to_file(self, filename):
         #print("[DEBUG]:\t" + filename)
+        if self.write_final_pop and self.current_generation == self.stop_value:
+            print("printing last stats")
+            with open(self.path_to_final_pop + self.experiment.get_experiment_filename() + "_final_pop.txt", "w") as text_file:
+                try:
+                    for i in range(self.population_size):
+                        ind = self.population[i]
+                        text_file.write(str(ind['tree'].get_str()) + "\n")
+                except IOError as e:
+                    print(bcolors.FAIL + "[ERROR]:\tI/O error while writing engine state ({0}): {1}".format(e.errno, e.strerror) , bcolors.ENDC)
+
         if self.write_log or self.current_generation == self.stop_value:
             with open(filename + "log.txt", "w") as text_file:
                 try:
