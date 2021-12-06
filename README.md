@@ -157,7 +157,7 @@ As a default, the variables needed to index a point within the problem domain ar
 ```python
 indexing_variables = 2
 domain_range = [256, 256] # two-dimensions
-my_terminal_set = Terminal_set(indexing_variables, domain_range)
+my_terminal_set = Terminal_Set(indexing_variables, domain_range)
 
 # Add an element to the set called var that is filled with ones (same thing as scalar(1))
 my_terminal_set.add_to_set("var", tf.constant(1.0, shape=resolution))
