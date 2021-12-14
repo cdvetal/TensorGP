@@ -167,7 +167,9 @@ my_terminal_set.remove_from_set("y")
 
 engine = Engine(terminal_set=my_terminal_set,  ...)
 ```
-Where ```domain_range ``` defines the shape and size of the problem domain and ```indexing_variables``` defines how many dimensions you want to explicitly be able to index within your domain. If that sounded complicated don't worry, for most use cases just pass the number of dimensions of your domain. This can be useful if your domain has extra dimensionality for things like RGB colors channels, defined for example as  ```domain_range = [256, 256, 3]```, but you don't really want to have a ```z``` variable to index the color channels as part of the terminal set.  This is used in **"example_evoart.py"**, the only difference being that in that example the effective dimension is passed directly to the engine call using the ```effective_dims``` parameter.
+Where ```domain_range ``` defines the shape and size of the problem domain and ```indexing_variables``` defines how many dimensions you want to explicitly be able to index within your domain. If that sounded complicated don't worry, for most use cases just pass the number of dimensions of your domain.
+For instance, if you want to evolve over a 2D domain with the output being black and white images, you can simply pass ```domain_range = [256, 256]``` (no need for a 1 at the end) and then set the dimensionality to 2.
+However, if your domain has extra dimensionality for things like RGB colors channels you would define it, for example, as  ```domain_range = [256, 256, 3]```, but maybe you don't really want to have a ```z``` variable to index the color channels as part of the terminal set, so you set ```indexing_variables = 2```.  This is used in **"example_evoart.py"**, the only difference being that in that example the effective dimension is passed directly to the engine call using the ```effective_dims``` parameter.
 
 Another important aspect to point out is that scalars/constants are not really part of the terminal set, even though they are defined as terminals by the engine. Instead, TensorGP resorts to user-defined probabilities for the frequency of generated scalars (see ```terminal_prob```, ```scalar_prob``` and ```uniform_scalar_prob``` in the parameters section). 
 
@@ -179,7 +181,7 @@ You can define custom operators in TensorGP by defining a function as a composit
 ```python
 import tensorflow as tf
 
-def rmse_node(child1, child2, dims=[])
+def rmse_node(child1, child2, dims=[]):
 	return tf.sqrt(tf.reduce_mean(tf.square(child1 - child2)))
 ```
 
@@ -190,17 +192,33 @@ After this, the only thing to do is to define the new operator arity and add in 
 
 ```python
 # Define subset of internally implemented operators
+indexing_variables = 2
 primitives = {'add', 'sub', 'mult', 'div'}
-my_function_set = Function_Set(primitives)
+my_function_set = Function_Set(primitives, indexing_variables)
 
 # Add rmse_node, which has 2 arguments with name "rmse"
 my_function_set.add_to_set("rmse", 2, rmse_node)
 
 # You can also remove operators from the set
-my_function_set-remove_from_set("mult")
+my_function_set.remove_from_set("mult")
 
-engine = Engine(operators=my_function_set,  ...)
+engine = Engine(function_set=my_function_set,  ...)
 ```
+
+### Function Set
+
+If instead of defining custom opertors, you simply want to defined a subset of the existing ones, you can do so with the `operators` parameter.
+As an example:
+
+```Python
+ops = {'add, 'sub'}
+engine = Engine(operators =ops,
+		... # other parameters,
+		)
+engine.run()
+```
+
+Would start an evolutionary run with only the standard sub and add operators defined internally by the engine.
 
 
 For a full list of TensorFlow primitives, check the official [website](https://www.tensorflow.org/api_docs/python/tf/all_symbols).
@@ -244,7 +262,7 @@ TensorGP provides an extensive set of operators that are implemented out of box,
 | len | Euclidean distance | 2 | Image | Color | `sqrt(x^2 + y^2)`
 | lerp | Linear Interpolation | 3 | Image | Color | `x + (y - z) * frac(z)`
 
- [1] The warp operator is commonly used to deform images and is defined as a transformation that maps every element of a tensor to a different coordinate (two-dimensional warp is commonly to distort image shapes, see [Wikipedia](https://en.wikipedia.org/wiki/Image_warping)). This mapping is done according to an array of tensors with a size equal to the number of dimensions of the problem. Each of these tensors dictates where elements will end up within a given dimension. TensorGP implements a generalization of the warp operator that enables the mapping of any set of dimensions.
+ [1] The warp operator is commonly used to deform images and is defined as a transformation that maps every element of a tensor to a different coordinate (two-dimensional warp is commonly to distort image shapes, see [Wikipedia](https://en.wikipedia.org/wiki/Image_warping)). This mapping is done according to an array of tensors with a size equal to the number of dimensions of the problem. Each of these tensors dictates where elements will end up within a given dimension. TensorGP implements a generalization of the warp operator that enables the mapping of any subset of dimensions.
 
 ###  Fitness arguments
 List of engine variables that can be accessed by the fitness function through Python `**kwargs`:
@@ -617,4 +635,4 @@ Authors of academic papers that use TensorGP for their experimenation are encour
 
 In case you are having trouble with a specific experimental setup (and already read the documentation), or if you have any suggestion/feedback about TensorGP you may contact:
 
-**fjrbaeta@student.dei.uc.pt**
+**fjrbaeta@dei.uc.pt**
