@@ -192,17 +192,33 @@ After this, the only thing to do is to define the new operator arity and add in 
 
 ```python
 # Define subset of internally implemented operators
+indexing_variables = 2
 primitives = {'add', 'sub', 'mult', 'div'}
-my_function_set = Function_Set(primitives)
+my_function_set = Function_Set(primitives, indexing_variables)
 
 # Add rmse_node, which has 2 arguments with name "rmse"
 my_function_set.add_to_set("rmse", 2, rmse_node)
 
 # You can also remove operators from the set
-my_function_set-remove_from_set("mult")
+my_function_set.remove_from_set("mult")
 
-engine = Engine(operators=my_function_set,  ...)
+engine = Engine(function_set=my_function_set,  ...)
 ```
+
+### Function Set
+
+If instead of defining custom opertors, you simply want to defined a subset of the existing ones, you can do so with the `operators` parameter.
+As an example:
+
+```Python
+ops = {'add, 'sub'}
+engine = Engine(operators =ops,
+		... # other parameters,
+		)
+engine.run()
+```
+
+Would start an evolutionary run with only the standard sub and add operators defined internally by the engine.
 
 
 For a full list of TensorFlow primitives, check the official [website](https://www.tensorflow.org/api_docs/python/tf/all_symbols).
