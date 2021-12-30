@@ -38,7 +38,7 @@ import matplotlib.ticker as mticker
 import pylab
 import time
 import random
-from heapq import nsmallest
+from heapq import nsmallest, nlargest
 from operator import itemgetter
 from PIL import Image
 
@@ -599,8 +599,10 @@ class Engine:
 
         chosen_node = self.engine_rng.choice(list(candidates.elements()))
 
-        node_dep, _ = chosen_node.get_depth()
-        _, mutation_node = self.generate_program('grow', -1, node_dep, root=True)
+        _max_dep, _ = chosen_node.get_depth()
+        _max_dep = min(_max_dep, self.max_subtree_dep)
+        _min_dep = min(_max_dep, self.min_subtree_dep)
+        _, mutation_node = self.generate_program('grow', -1, max_depth=_max_dep, min_depth=_min_dep, root=True)
 
         chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)] = mutation_node
         return new_individual
@@ -617,11 +619,11 @@ class Engine:
                     node.children = [self.engine_rng.uniform(self.erc_min, self.erc_max) for i in range(self.terminal.dimension)]
             else:
                 if node.value == 'scalar':
-                    node.value = self.engine_rng.choice(list(self.terminal.set))[0]
+                    node.value = self.engine_rng.choice(list(self.terminal.set))
                 else:
                     temp_tset = self.terminal.set.copy()
                     del temp_tset[node.value]
-                    node.value = self.engine_rng.choice(list(temp_tset))[0]
+                    node.value = self.engine_rng.choice(list(temp_tset))
         else:
             arity_to_search = self.function.set[node.value][0]
             set_of_same_arities = self.function.arity[arity_to_search][:]
@@ -629,7 +631,6 @@ class Engine:
 
             if len(set_of_same_arities) > 0:
                 node.value = self.engine_rng.choice(set_of_same_arities)
-
 
         if not node.terminal:
             for i in node.children:
@@ -686,6 +687,8 @@ class Engine:
                  max_tree_depth = 8,
                  max_init_depth = None,
                  min_init_depth = None,
+                 max_subtree_dep = None,
+                 min_subtree_dep = None,
                  method = 'ramped half-and-half',
                  terminal_prob = 0.2,
                  scalar_prob = 0.55,
@@ -695,6 +698,7 @@ class Engine:
                  objective = 'minimizing', # TODO: this feature will be removed soon...on second thought maybe not
                  min_domain = -1,
                  max_domain = 1,
+                 bloat_control = 'full_dynamic_dep',
                  const_range = None,
                  effective_dims = None,
                  operators = None,
@@ -740,11 +744,12 @@ class Engine:
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
         self.elitism = constrain(0, elitism, self.population_size)
-        self.max_tree_depth = max_tree_depth
-        self.min_tree_depth = min_tree_depth
         self.stop_criteria = stop_criteria
         self.save_graphics = save_graphics
         self.show_graphics = show_graphics
+        if bloat_control not in ['full_dynamic_dep', 'dynamic_dep']: # add full_dynamic_size, dynamic_size
+            bloat_control = 'off'
+        self.bloat_control = bloat_control
         self.immigration = immigration
         self.debug = debug
         self.save_to_file = save_to_file
@@ -753,8 +758,20 @@ class Engine:
         self.terminal_prob = terminal_prob
         self.scalar_prob = scalar_prob
         self.uniform_scalar_prob = uniform_scalar_prob
-        self.max_init_depth = self.max_tree_depth if (max_init_depth is None) else max_init_depth
-        self.min_init_depth = self.min_tree_depth if (min_init_depth is None) else min_init_depth
+
+        if self.bloat_control in ['full_dynamic_dep', 'dynamic_dep']:
+            self.max_init_depth = 5 if (max_init_depth is None) else max_init_depth
+            self.min_init_depth = 2 if (min_init_depth is None) else min_init_depth
+            self.min_tree_depth = self.max_init_depth
+            self.max_tree_depth = self.min_init_depth
+        else:
+            self.min_tree_depth = min_tree_depth
+            self.max_tree_depth = max_tree_depth
+            self.max_init_depth = self.max_tree_depth if (max_init_depth is None) else max_init_depth
+            self.min_init_depth = self.min_tree_depth if (min_init_depth is None) else min_init_depth
+        self.max_subtree_dep = self.max_tree_depth if (max_subtree_dep is None) else max_subtree_dep
+        self.min_subtree_dep = self.min_tree_depth if (min_subtree_dep is None) else min_subtree_dep
+
         self.target_dims = [128, 128] if (target_dims is None) else target_dims
         self.dimensionality = len(self.target_dims)
         self.effective_dims = self.dimensionality if effective_dims is None else effective_dims
@@ -809,7 +826,7 @@ class Engine:
         if isinstance(function_set, Function_Set):
             self.function = function_set
         else:
-            self.function = Function_Set(self.debug, operators, self.effective_dims)
+            self.function = Function_Set(operators, self.effective_dims, debug=self.debug)
         if isinstance(terminal_set, Terminal_Set):
             self.terminal = terminal_set
         else:
@@ -851,9 +868,9 @@ class Engine:
         # fitness - stop evolution if best individual is close enought to target (or given value)
         # generation - stop evolution after a given number of generations
         if self.objective == 'minimizing':
-            self.objective_condition = lambda x: (x < self.best['fitness'])
+            self.objective_condition = lambda x: (x < self.best_overall['fitness'])
         else:
-            self.objective_condition = lambda x: (x > self.best['fitness'])
+            self.objective_condition = lambda x: (x > self.best_overall['fitness'])
 
         if stop_criteria == 'fitness':  # if fitness then stop value means error
             self.stop_value = stop_value
@@ -1163,7 +1180,8 @@ class Engine:
             _avg = np.average(res[k])
             _std = np.std(res[k])
             _best = self.best[k]
-            res[k] = [_avg, _std, _best]
+            _best_all = self.best_overall[k]
+            res[k] = [_avg, _std, _best, _best_all]
         return res
 
     def generate_pop_images(self, expressions, fpath = None):
@@ -1210,6 +1228,7 @@ class Engine:
 
             self.population = self.previous_state['population']
             self.best = self.previous_state['best']
+            self.best_overall = self.previous_state['best_overall']
 
         else:
             self.experiment.set_generation_directory(self.current_generation)
@@ -1220,6 +1239,7 @@ class Engine:
                                                                     self.max_nodes,
                                                                     immigration=False,
                                                                     read_from_file=self.pop_file)
+            self.best_overall = self.best
 
         # write first gen data
         self.write_pop_to_csv()
@@ -1229,10 +1249,14 @@ class Engine:
         # display gen statistics
         data = []
         pops = self.population_stats(self.population)
-        data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['nodes'][0], pops['nodes'][1], pops['nodes'][2]])
-        print(bcolors.BOLD + bcolors.OKCYAN + "\n[ gen,   fit avg,   fit std,  fit best,   dep avg,   dep std,  dep best,   nod avg,   nod std,  nod best, gen time, fit time,tensor time]\n" , bcolors.ENDC)
+        data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['fitness'][3],
+                     pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['depth'][3],
+                     pops['nodes'][0], pops['nodes'][1], pops['nodes'][2], pops['nodes'][3]])
+        print(bcolors.BOLD + bcolors.OKCYAN + "\n[       |                    FITNESS                    |                     DEPTH                     |                     NODES                     |              TIMINGS              ]" , bcolors.ENDC)
+        print(bcolors.BOLD + bcolors.OKCYAN +   "[  gen  |    avg    ,    std    , best(gen) , best(all) |    avg    ,    std    , best(gen) , best(all) |    avg    ,    std    , best(gen) , best(all) | generation,  fit eval ,tensor eval]\n" , bcolors.ENDC)
+        #print(bcolors.BOLD + bcolors.OKCYAN + "\n[  gen  ,     fit avg,   std,  best (gen),   dep avg,   dep std,  dep best,   nod avg,   nod std,  nod best, gen time, fit time,tensor time]\n" , bcolors.ENDC)
         #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3], ",", data[-1][4], ",", data[-1][5], ",", data[-1][6], ",", data[-1][7], ",", data[-1][8], "]")
-        print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d, %9.6f, %9.6f, %9.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
+        print(bcolors.OKBLUE + "[%7d, %10.6f, %10.6f, %10.6f, %10.6f, %10.3f, %10.6f, %10d, %10d, %10.3f, %10.6f, %10d, %10d, %10.6f, %10.6f, %10.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
 
 
         self.current_generation += 1
@@ -1258,11 +1282,10 @@ class Engine:
                 self.population = self.engine_rng.sample(self.population, self.population_size)
 
             # create new population of individuals
-
-            #new_population = [self.best]
-            new_population = nsmallest(self.elitism, self.population, key=itemgetter('fitness'))
-
-            max_tree_depth = self.best['depth']
+            if self.objective == 'minimizing':
+                new_population = nsmallest(self.elitism, self.population, key=itemgetter('fitness'))
+            else:
+                new_population = nlargest(self.elitism, self.population, key=itemgetter('fitness'))
 
             # TODO: this is to monitor number of retries, it will be changed
             retrie_cnt = []
@@ -1288,13 +1311,22 @@ class Engine:
                         indiv_temp = parent['tree']
 
                     member_depth, member_nodes = indiv_temp.get_depth()
+
+                    # bloat_control
+                    #if self.bloat_control == 'full_dynamic_dep':
+                    #    self.max_tree_depth = min(self.best['depth'], self.min_tree_depth)
+                    #elif self.bloat_control == 'dynamic_dep':
+                    #    self.max_tree_depth = max(self.best['depth'], self.max_tree_depth)
+                    #print("max tree depth: ", self.max_tree_depth)
+
+
                     rcnt+=1
                 retrie_cnt.append(rcnt)
 
                 # add newly formed child
                 new_population.append({'tree': indiv_temp, 'fitness': 0, 'depth': member_depth, 'nodes':member_nodes})
-                if member_depth > max_tree_depth:
-                    max_tree_depth = member_depth
+                #if member_depth > max_tree_depth:
+                #    max_tree_depth = member_depth
 
                 # print individual
                 if self.debug > 10: print("Individual " + str(current_individual) + ": " + indiv_temp.get_str())
@@ -1305,10 +1337,12 @@ class Engine:
 
 
             # calculate fitness of the new population
-            new_population, _new_best = self.fitness_func_wrap(population=new_population,
+            new_population, self.best = self.fitness_func_wrap(population=new_population,
                                                                f_path=self.experiment.current_directory)
+
+
             # update best and population
-            if self.objective_condition(_new_best['fitness']): self.best = _new_best
+            if self.objective_condition(self.best['fitness']): self.best_overall = self.best
             self.population = new_population
 
             # update engine time
@@ -1323,14 +1357,18 @@ class Engine:
             #data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['depth'][0], pops['depth'][1], pops['depth'][2]])
             #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3], ",", data[-1][4], ",", data[-1][5], "]")
 
-            data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['depth'][0], pops['depth'][1],
-                         pops['depth'][2], pops['nodes'][0], pops['nodes'][1], pops['nodes'][2]])
+            #data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['depth'][0], pops['depth'][1],
+            #             pops['depth'][2], pops['nodes'][0], pops['nodes'][1], pops['nodes'][2]])
 
             #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3],
             #      ",", data[-1][4], ",", data[-1][5], ",", data[-1][6], ",", data[-1][7], ",", data[-1][8], "]")
             #print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d]"%((self.current_generation,) + tuple(data[-1])) , bcolors.ENDC)
-            print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d, %9.6f, %9.6f, %9.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
+            #print(bcolors.OKBLUE + "[%4d, %9.6f, %9.6f, %9.6f, %9.3f, %9.6f, %9d, %9.3f, %9.6f, %9d, %9.6f, %9.6f, %9.6f]"%((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
 
+            data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['fitness'][3],
+                         pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['depth'][3],
+                         pops['nodes'][0], pops['nodes'][1], pops['nodes'][2], pops['nodes'][3]])
+            print(bcolors.OKBLUE + "[%7d, %10.6f, %10.6f, %10.6f, %10.6f, %10.3f, %10.6f, %10d, %10d, %10.3f, %10.6f, %10d, %10d, %10.6f, %10.6f, %10.6f]" %((self.current_generation,) + tuple(data[-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)), bcolors.ENDC)
 
             self.write_pop_to_csv()
 
@@ -1352,7 +1390,8 @@ class Engine:
             print("\nElapsed Init Time: \t\t" + str(self.elapsed_init_time) + " sec.")
             print("Elapsed Tensor Time: \t" + str(self.elapsed_tensor_time) + " sec.")
             print("Elapsed Fitness Time:\t" + str(self.elapsed_fitness_time) + " sec.")
-            print("\nBest individual:\n" + bcolors.OKCYAN + self.best['tree'].get_str(), bcolors.ENDC)
+            print("\nBest individual (generation) :\n" + bcolors.OKCYAN + self.best['tree'].get_str(), bcolors.ENDC)
+            print("\nBest individual (overall) :\n" + bcolors.OKCYAN + self.best_overall['tree'].get_str(), bcolors.ENDC)
 
         if self.save_graphics: self.graph_statistics()
         timings = [self.elapsed_engine_time, self.elapsed_tensor_time, self.elapsed_fitness_time]
@@ -1449,7 +1488,7 @@ class Engine:
     def save_state_to_file(self, filename):
         #print("[DEBUG]:\t" + filename)
         if self.write_final_pop and self.current_generation == self.stop_value:
-            print("printing last stats")
+            #print("printing last stats")
             with open(self.path_to_final_pop + self.experiment.get_experiment_filename() + "_final_pop.txt", "w") as text_file:
                 try:
                     for i in range(self.population_size):
@@ -1496,12 +1535,17 @@ class Engine:
                     # population
                     text_file.write("\n\nPopulation: \n")
 
-                    text_file.write("\nBest individual:")
+                    text_file.write("\nBest individual (generation):")
                     text_file.write("\nExpression: " + str(self.best['tree'].get_str()))
                     text_file.write("\nFitness: " + str(self.best['fitness']))
                     text_file.write("\nDepth: " + str(self.best['depth']) + "\n")
 
-                    # 4 lines per indiv starting at 32
+                    text_file.write("\nBest individual (overall):")
+                    text_file.write("\nExpression: " + str(self.best_overall['tree'].get_str()))
+                    text_file.write("\nFitness: " + str(self.best_overall['fitness']))
+                    text_file.write("\nDepth: " + str(self.best_overall['depth']) + "\n")
+
+                    # 4 lines per indiv
                     text_file.write("\nCurrent Population:\n")
                     for i in range(self.population_size):
                         ind = self.population[i]
@@ -1532,11 +1576,17 @@ class Engine:
             print("Engine ID:\t" + str(self.experiment.ID))
             print("Generation:\t" + str(self.current_generation))
 
-            print("\nBest Individual:")
+            print("\nBest Individual (generation):")
             print("Fitness:\t" + str(self.best['fitness']))
             print("Depth:\t" + str(self.best['depth']))
             if self.debug > 2:
                 print("Expression:\t" + str(self.best['tree'].get_str()))
+
+            print("\nBest Individual (overall):")
+            print("Fitness:\t" + str(self.best_overall['fitness']))
+            print("Depth:\t" + str(self.best_overall['depth']))
+            if self.debug > 2:
+                print("Expression:\t" + str(self.best_overall['tree'].get_str()))
 
             #print population
             if self.debug > 10:
@@ -1551,10 +1601,9 @@ class Engine:
             print("\n____________________________________________________\n")
 
 
-
 class Function_Set:
 
-    def __init__(self, debug, fset, edim):
+    def __init__(self, fset, edim, debug = 0):
 
         self.debug = debug
         self.set = {}
@@ -1703,179 +1752,3 @@ class Terminal_Set:
         for s in self.set:
             res += s + "\n"
         return res
-
-"""
-def build_function_set(fset):
-    global arity_fset
-    global function_set
-
-    fset = sorted(fset)
-    result = {}
-    operators_def = {  # arity, function
-        'abs': [1, resolve_abs_node],
-        'add': [2, resolve_add_node],
-        'and': [2, resolve_and_node],
-        'clip': [3, resolve_clip_node],
-        'cos': [1, resolve_cos_node],
-        'div': [2, resolve_div_node],
-        'exp': [1, resolve_exp_node],
-        'frac': [1, resolve_frac_node],
-        'if': [3, resolve_if_node],
-        'len': [2, resolve_len_node],
-        'lerp': [3, resolve_lerp_node],
-        'log': [1, resolve_log_node],
-        'max': [2, resolve_max_node],
-        'mdist': [2, resolve_mdist_node],
-        'min': [2, resolve_min_node],
-        'mod': [2, resolve_mod_node],
-        'mult': [2, resolve_mult_node],
-        'neg': [1, resolve_neg_node],
-        'or': [2, resolve_or_node],
-        'pow': [2, resolve_pow_node],
-        'sign': [1, resolve_sign_node],
-        'sin': [1, resolve_sin_node],
-        'sqrt': [1, resolve_sqrt_node],
-        'sstep': [1, resolve_sstep_node],
-        'sstepp': [1, resolve_sstepp_node],
-        'step': [1, resolve_step_node],
-        'sub': [2, resolve_sub_node],
-        'tan': [1, resolve_tan_node],
-        'warp': [dim, resolve_warp_node],
-        'xor': [2, resolve_xor_node],
-    }
-
-    arity_order = {}
-    for e in fset:
-        fset_list = operators_def.get(e)
-        arity = fset_list[0]
-        result[e] = fset_list
-        if arity not in arity_order:
-            arity_order[arity] = []
-        arity_order[arity].append(e)
-
-    #print(arity_order)
-
-    arity_fset, function_set = arity_order, result
-    #return arity_order, result
-
-
-def build_terminal_set(dim, dims, dev):
-    global terminal_set
-    global z_terminal
-
-    result = {}
-    with tf.device(dev):
-        for i in range(dim - 1):
-            digit = i
-            name = ""
-
-            while True:
-                n = digit % 26
-                val = n if n <= 2 else n - 26
-                name = chr(ord('x') + val) + name
-                digit //= 26
-                if digit <= 0:
-                    break
-
-            #print("[DEBUG]:\tAdded terminal " + str(name))
-
-            vari = i
-            if i < 2: vari = 1 - i
-            result[name] = resolve_var_node(np.copy(dims), vari)
-
-    z_terminal = resolve_var_node(np.copy(dims), 2)
-    terminal_set = result
-    #print(terminal_set)
-    return result
-"""
-
-#node_index = 0 # TODO: is this really needed?
-#function_set = {'max','min','abs','add','and','or','mult','sub','xor','neg','cos','sin','tan','sqrt','div','exp','log', 'warp', 'if', 'pow', 'sign', 'mdist'}
-#terminal_set = {}
-#arity_fset = {}
-#operator_duration = 0
-#_min_domain = -1
-#_max_domain = 1
-#_domain_delta = _max_domain - _min_domain
-#dim = 3
-#z_terminal = 0
-
-# TODO list
-# make target an engine property, pass it to fitness func by kwargs, make it be defined by a string expression and make the engine initialize it first
-# min and max domain also engine properties, no changes here
-# check dimensionality, we should always do number of terminal (x_terminal, y_terminal, z_terminal, ...) equal to the dimensionality
-# function set could be done by also done in init, just pass make a default with some main ops for engine call
-# if function set and target can be defined at init, terminal set should also be
-
-if __name__ == "__main__":
-
-    # test terminal set
-    """
-    res = [4, 4, 4]
-    terminal = Terminal_Set(1, 3, res, '/gpu:0')
-    print(terminal)
-    #print(terminal.set['x'])
-    terminal.add_to_set(res, 'term', tf.constant(1, shape = res))
-    terminal.add_to_set(res, 'x', tf.constant(1, shape=res))
-    print(terminal)
-    #print(terminal.set['term'])
-    terminal.remove_from_set('term')
-    terminal.remove_from_set('term')
-    print(terminal)
-    terminal.remove_from_set('x')
-    print(terminal)
-    """
-
-    # test function set
-    """
-    function = Function_Set(1, {'add', 'sub', 'mult'}, 3)
-    print(function)
-    function.add_to_set('mult', 2, resolve_sin_node)
-    print(function)
-    function.add_to_set('mult', 4, resolve_sin_node)
-    print(function)
-    function.add_to_set('ft', 3, resolve_cos_node)
-    print(function)
-    function.remove_from_set('ft')
-    function.remove_from_set('ftt')
-    print(function)
-    function.remove_from_set('mult')
-    print(function)
-    """
-"""
-def str_to_tree(stree, terminal_set, number_nodes=0, constrain_domain = True):
-    if stree in terminal_set:
-        return number_nodes, Node(value=stree, terminal=True, children=[])
-    elif stree[:6] == 'scalar':
-        numbers = [(constrain(float(x), _min_domain, _max_domain) if constrain_domain else float(x)) for x in re.split('\(|\)|,', stree)[1:-1]]
-
-        return number_nodes, Node(value='scalar', terminal=True, children=numbers)
-    else:
-        x = stree[:-1].split("(", 1)
-        print("x:", x)
-        primitive = x[0]
-        print("x0:", x[0])
-        if x[0][0] == '_':
-            primitive = x[0][1::]
-        args = x[1]
-        pc = 0
-        last_pos = 0
-        children = []
-
-        for i in range(len(args)):
-            c = args[i]
-            if c == '(':
-                pc += 1
-            elif c == ')':
-                pc -= 1
-            elif c == ',' and pc == 0:
-                number_nodes, tree = str_to_tree(args[last_pos:i], terminal_set, number_nodes, constrain_domain)
-                children.append(tree)
-                last_pos = i + 2
-
-        number_nodes, tree = str_to_tree(args[last_pos:], terminal_set, number_nodes, constrain_domain)
-        children.append(tree)
-        if primitive == "if":
-            children = [children[1], children[2], children[0]]
-        return number_nodes + 1, Node(value=primitive, terminal=False, children=children)
-"""
