@@ -461,32 +461,53 @@ class Engine:
 
     def crossover(self, parent_1, parent_2):
         crossover_node = None
-        if self.engine_rng.random() < 0.9:  # TODO: review, this is Koza's rule
+
+        if self.engine_rng.random() < 0.75 and not parent_1.terminal:  # TODO: review, this is Koza's rule
             # function crossover
-            parent_1_candidates = self.get_candidates(parent_1, True)
-            parent_1_chosen_node = self.engine_rng.choice(list(parent_1_candidates.elements()))
+            parent_1_candidates = self.list_nodes(parent_1, True, add_funcs=True, add_terms=False, add_root=True)
+            parent_1_chosen_node = self.engine_rng.choice(parent_1_candidates)
             possible_children = []
             for i in range(len(parent_1_chosen_node.children)):
                 if not parent_1_chosen_node.children[i].terminal:
                     possible_children.append(i)
             if possible_children != []:
-                crossover_node = copy.deepcopy(
-                    parent_1_chosen_node.children[self.engine_rng.sample(possible_children, 1)[0]])
+                crossover_node = copy.deepcopy(parent_1_chosen_node.children[self.engine_rng.choice(possible_children)])
             else:
                 crossover_node = copy.deepcopy(parent_1_chosen_node)
         else:
             parent_1_terminals = self.get_terminals(parent_1)
-            crossover_node = self.engine_rng.choice(list(parent_1_terminals.elements()))
+            #print("size of crossover node list: ", len(list(parent_1_terminals.elements())))
+            crossover_node = copy.deepcopy(self.engine_rng.choice(list(parent_1_terminals.elements())))
+
+        #print("Crossover node in parent 1: ", crossover_node.get_str())
+
         if crossover_node is None:
-            print("[ERROR]: Did not select a crossover node")
+            print("[ERROR]: Did not select a crossover node.")
         new_individual = copy.deepcopy(parent_2)
-        parent_2_candidates = self.get_candidates(new_individual, True)
-        parent_2_chosen_node = self.engine_rng.choice(list(parent_2_candidates.elements()))
+        parent_2_candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
 
-        #print("Node (val, children, terminal) : " + str(parent_2_chosen_node.value) + ", " + str(len(parent_2_chosen_node.children)) + ", " + str(parent_2_chosen_node.terminal))
+        if len(parent_2_candidates) > 0:
+            parent_2_chosen_node = self.engine_rng.choice(parent_2_candidates)
+            if not parent_2_chosen_node.terminal and len(parent_2_chosen_node.children) > 0:
+                rand_child = self.engine_rng.randint(0, len(parent_2_chosen_node.children) - 1)
+                parent_2_chosen_node.children[rand_child] = crossover_node
+            else:
+                new_individual = crossover_node
+        else:
+            new_individual = crossover_node
 
-        parent_2_chosen_node.children[self.engine_rng.randint(0, len(parent_2_chosen_node.children) - 1)] = crossover_node
         return new_individual
+
+    def get_candidates(self, node, root):
+        candidates = Counter()
+        if not node.terminal:
+            for i in node.children:
+                if (i is not None) and (not i.terminal):
+                    candidates.update([node])
+                    candidates.update(self.get_candidates(i, False))
+        if root and candidates == Counter():
+            candidates.update([node])
+        return candidates
 
     def tournament_selection(self):
         if self.objective == 'minimizing':
@@ -555,18 +576,21 @@ class Engine:
         #print("[DEBUG D] Before:\t" + new_individual.get_str())
 
         # every node except last depth (terminals)
-        candidates = self.list_nodes(new_individual, True, True, False, True)
-        chosen_node = self.engine_rng.choice(candidates)
+        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
 
-        #insert node between choosen and choosen's child
-        #random child of chosen
-        chosen_child = chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)]
+        if len(candidates) > 0:
+            chosen_node = self.engine_rng.choice(candidates)
+
+            #insert node between choosen and choosen's child
+            #random child of chosen
+            chosen_child = chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)]
+        else:
+            chosen_child = new_individual
 
         _v = chosen_child.value
         _c = chosen_child.children
         _t = chosen_child.terminal
         child_temp = Node(value=_v, children=_c, terminal=_t)
-
 
         chosen_child.value = self.engine_rng.choice(list(self.function.set))
         chosen_child.terminal = False
@@ -644,16 +668,6 @@ class Engine:
         chosen_node = self.engine_rng.choice(candidates)
         self.replace_nodes(chosen_node)
         return new_individual
-
-    def get_candidates(self, node, root):
-        candidates = Counter()
-        for i in node.children:
-            if (i is not None) and (not i.terminal):
-                candidates.update([node])
-                candidates.update(self.get_candidates(i, False))
-        if root and candidates == Counter():
-            candidates.update([node])
-        return candidates
 
     def get_terminals(self, node):
         candidates = Counter()
@@ -903,7 +917,7 @@ class Engine:
         # TODO: review ((self.max_init_depth - max_depth) >= min_depth), works if we call initialize pop with max_init_depth
 
         if (max_depth * max_nodes) == 0 or (
-                (not root) and
+                #(not root) and
                 (method == 'grow') and
                 ((self.max_init_depth - max_depth) >= min_depth) and
                 (self.engine_rng.random() < self.terminal_prob)
@@ -933,10 +947,13 @@ class Engine:
         if max_depth < 2:
             if max_depth <= 0:
                 return 0, []
-            if max_depth == 1:
-                method = 'full'
+            #if max_depth == 1:
+            #    method = 'full'
+
         population = []
         pop_nodes = 0
+
+
         if method == 'full' or method == 'grow':
             for i in range(individuals):
 
@@ -948,9 +965,14 @@ class Engine:
                 dep, nod = t.get_depth()
                 population.append({'tree': t, 'fitness': 0, 'depth': dep, 'nodes': nod})
         else:
-
+            print("here!")
             # -1 means no minimun depth, but the ramped 5050 default should be 2 levels
-            _min_depth = 2 if (min_depth <= 0) else min_depth
+            #_min_depth = 2 if (min_depth <= 0) else min_depth
+            _min_depth = min_depth
+
+            print("m", _min_depth)
+            print("M", max_depth)
+
 
             divisions = max_depth - (_min_depth - 1)
             parts = math.floor(individuals / divisions)
@@ -974,6 +996,7 @@ class Engine:
 
                     if j >= mfull:
                         met = 'grow'
+                    print("i: ", i, "min dep: ", min_depth)
                     _n, t = self.generate_program(met, max_nodes, i, min_depth = min_depth)
                     tree_nodes = (max_nodes - _n)
                     #print("Tree nodes: " + str(tree_nodes))
@@ -1119,7 +1142,7 @@ class Engine:
                 if maxpopd > self.max_tree_depth:
                     newmaxpopd = max(maxpopd, self.max_tree_depth)
                     print(bcolors.WARNING + "[WARNING]:\tMax depth of input trees (" + str(maxpopd) + ") is higher than defined max tree depth (" +
-                    str(self.max_tree_depth) + "), clipping max tree depth value to " + str(newmaxpopd) , bcolors.ENDC)
+                          str(self.max_tree_depth) + "), clipping max tree depth value to " + str(newmaxpopd) , bcolors.ENDC)
                     self.max_tree_depth = newmaxpopd
 
                 if self.debug > 0:
@@ -1199,7 +1222,7 @@ class Engine:
             tensors, time_taken = self.calculate_tensors(pop)
         else:
             print(bcolors.FAIL + "[ERROR]:\tTo generate images from a population please enter either"
-                  " a file or a list with the corresponding expressions." , bcolors.ENDC)
+                                 " a file or a list with the corresponding expressions." , bcolors.ENDC)
             return
         dimensionality = tf.rank(tensors[0])
         index = 0
