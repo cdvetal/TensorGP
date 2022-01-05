@@ -1089,7 +1089,7 @@ class Engine:
         # Notes: measuring time should not be up to the fit function writer. We should provide as much info as possible
         # Maybe best pop shouldnt be required
 
-        population, best_ind = self.fitness_func(generation = self.current_generation,
+        population, best_ind, tensors = self.fitness_func(generation = self.current_generation,
                                                  population = population,
                                                  tensors = tensors,
                                                  f_path = f_path,
