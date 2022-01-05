@@ -66,7 +66,7 @@ def nima_classifier(**kwargs):
     # save best indiv
     if images:
         save_image(tensors[best_ind], best_ind, fn, 3, addon='_best')
-    return population, population[best_ind]
+    return population, population[best_ind], tensors
 
 
 # if no function set is provided, the engine will use all internally available operators:
