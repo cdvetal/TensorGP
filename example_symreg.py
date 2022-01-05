@@ -36,7 +36,7 @@ def calc_fit(**kwargs):
     #if generation == gens:
     #    save_image(tensors[best_ind], best_ind, fn, 2)
 
-    return population, population[best_ind], tensors
+    return population, population[best_ind]
 
 
 # Different types of function sets
