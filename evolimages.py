@@ -19,7 +19,6 @@ def teste(**kwargs):
     objective = kwargs.get('objective')
     _resolution = kwargs.get('resolution')
     _stf = kwargs.get('stf')
-    _dim = kwargs.get('dim')
 
     images = True
     # set objective function according to min/max
@@ -38,7 +37,7 @@ def teste(**kwargs):
     # scores
     for index in range(len(tensors)):
         if generation % _stf == 0:
-            save_image(tensors[index], index, fn, _dim) # save image
+            save_image(tensors[index], index, fn, _resolution) # save image
         #print(tensors[index])
         # fit = mean - std
         fit = random.random() ## random!
@@ -51,9 +50,8 @@ def teste(**kwargs):
 
     # save best indiv
     if images:
-        save_image(tensors[best_ind], best_ind, fn, _dim, addon='_best')
-    return population, population[best_ind]
-
+        save_image(tensors[best_ind], best_ind, fn, _resolution, addon='_best')
+    return population, best_ind
 
 # if no function set is provided, the engine will use all internally available operators:
 #fset = {'abs', 'add', 'and', 'clip', 'cos', 'div', 'exp', 'frac', 'if', 'len', 'lerp', 'log',
@@ -68,13 +66,13 @@ if __name__ == "__main__":
     resolution = [28, 28]
 
     # GP params (teste super simples)
-    dev = '/gpu:0'  # device to run, write '/cpu_0' to tun on cpu
-    number_generations = 2 ## 5
+    dev = '/cpu:0'  # device to run, write '/cpu_0' to tun on cpu
+    number_generations = 10
     pop_size = 10
     tour_size = 3
     mut_prob = 0.1
-    cross_prob = 0.9
-    max_tree_dep = 5
+    cross_prob = 0.95
+    max_tree_dep = 3
     # tell the engine that the RGB does not explicitly make part of the terminal set
     edims = 2
 
@@ -88,7 +86,6 @@ if __name__ == "__main__":
     #seed = random.randint(0, 0x7fffffff)
     seed = 2020  # reproducibility
 
-
     # create engine
     engine = Engine(fitness_func=teste,
                     population_size=pop_size,
@@ -97,15 +94,20 @@ if __name__ == "__main__":
                     crossover_rate=cross_prob,
                     max_tree_depth = max_tree_dep,
                     target_dims=resolution,
-                    method='grow', #method='ramped half-and-half',
-                    objective='maximizing',
+                    #method='grow',
+                    method='ramped half-and-half',
+                    objective='minimizing',
                     device=dev,
                     stop_criteria='generation',
+                    min_init_depth=0,
+                    max_init_depth=10,
+                    bloat_control='dynamic_dep',
+                    elitism=0,
                     stop_value=number_generations,
                     effective_dims = edims,
                     seed = seed,
                     debug=0,
-                    save_to_file=10, # save all images from each 10 generations
+                    save_to_file=3, # save all images from each 10 generations
                     save_graphics=True,
                     show_graphics=False,
                     write_gen_stats=False,
@@ -114,45 +116,27 @@ if __name__ == "__main__":
                     read_init_pop_from_file = None)
                     #read_init_pop_from_file = "/home/scarlett/Documents/TensorGP/TensorGP-master/runs/run__2021_11_19__18_30_27_780__107305148598124544__images/run__2021_11_19__18_30_27_830__107305148598124544_final_pop.txt") # read predefined pop
 
+    #str_tree1 = "add(x, y)"  log(x), y, escolhe x dá x; x, y escolhe x dá x; x, log(y), escolhe x dá log(x)
+    #str_tree2 = "scalar(1.0)"
+    #str_tree1 = "x"
+    #_, tree1 = str_to_tree(str_tree1, engine.terminal.set, constrain_domain=False)
+    #print("Tree1: ", tree1.get_str())
+    #_, tree2 = str_to_tree(str_tree2, engine.terminal.set, constrain_domain=False)
+    #print("Tree2: ", tree2.get_str())
+    #indiv = engine.crossover(tree1, tree2)
+    #print("Res: ", indiv.get_str())
+
+
     # This experiment is comparatively slower, but bear inmind that the NIMA classifier takes
     # a considerable amount of time
     # run evolutionary process
     engine.run()
-    print(len(engine.population))
-    print(engine.population[0])
-    print(engine.best)
-    print(engine.best['fitness'])
-    print("previous teste!")
+    print("First run over!")
+    _, tensors = engine.run(5)
+    print("Done!")
+    for t in tensors:
+        print(t.shape)
+    print(tensors[0])
 
 
-    ### correr mais N geraçºoes ?
-    
-    # mudar parametros da engine
-    
-    #engine.seed = 2021 # exemplo
-    #chamar restart para correr de novo com mais new_stop generations
-    engine.restart(new_stop = 2)
-
-    print(len(engine.population))
-    print(engine.current_generation)
-    print(engine.population[0])
-    print(engine.best)
-    print(engine.best['fitness'])
-
-    engine.restart(new_stop = 2)
-
-    print(len(engine.population))
-    print(engine.current_generation)
-    print(engine.population[0])
-    print(engine.best)
-    print(engine.best['fitness'])
-    engine.restart(new_stop = 2)
-
-    print(len(engine.population))
-    print(engine.current_generation)
-    print(engine.population[0])
-    print(engine.best)
-    print(engine.best['fitness'])
-    print("final")
-    
     
