@@ -344,17 +344,20 @@ def save_image(tensor, index, fn, dims, addon=''):
     final_tensor = tf.scalar_mul(255 / _domain_delta, final_tensor)
 
     aux = np.array(tensor, dtype='uint8')
-    if len(dims) == 2:
-        Image.fromarray(aux, mode="L").save(path) # no color
-    elif dims == 3:
-        Image.fromarray(aux, mode="RGB").save(path) # color
-    else:
-        print("Attempting to save tensor with rank ", len(dims), " as an image, must be rank 2 (grayscale) or 3 (RGB).")
+    try:
+        if len(dims) == 2:
+            Image.fromarray(aux, mode="L").save(path) # no color
+        elif len(dims) == 3:
+            Image.fromarray(aux, mode="RGB").save(path) # color
+        else:
+            print("Attempting to save tensor with rank ", len(dims), " as an image, must be rank 2 (grayscale) or 3 (RGB).")
+    except ValueError:
+        print()
     return path
 
 # just a wrapper for different expression types and strip preprocessing
 def str_to_tree(stree, terminal_set, constrain_domain=True):
-    return str_to_tree_normal(stree.strip() + "", terminal_set, 0, constrain_domain)
+    return str_to_tree_normal(stree.replace(" ", "") + "", terminal_set, 0, constrain_domain)
 
 
 def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain = True):
@@ -366,9 +369,9 @@ def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain = T
         return number_nodes, Node(value='scalar', terminal=True, children=numbers)
     else:
         x = stree[:-1].split("(", 1)
-        #print("x:", x)
+        print("x:", x)
         primitive = x[0]
-        #print("x0:", x[0])
+        print("x0:", x[0])
         if x[0][0] == '_':
             primitive = x[0][1::]
         args = x[1]
@@ -385,7 +388,7 @@ def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain = T
             elif c == ',' and pc == 0:
                 number_nodes, tree = str_to_tree_normal(args[last_pos:i], terminal_set, number_nodes, constrain_domain)
                 children.append(tree)
-                last_pos = i + 2
+                last_pos = i + 1
 
         number_nodes, tree = str_to_tree_normal(args[last_pos:], terminal_set, number_nodes, constrain_domain)
         children.append(tree)
@@ -1089,7 +1092,7 @@ class Engine:
         # Notes: measuring time should not be up to the fit function writer. We should provide as much info as possible
         # Maybe best pop shouldnt be required
 
-        population, best_ind, tensors = self.fitness_func(generation = self.current_generation,
+        population, best_ind = self.fitness_func(generation = self.current_generation,
                                                  population = population,
                                                  tensors = tensors,
                                                  f_path = f_path,
@@ -1191,7 +1194,7 @@ class Engine:
         #calculate fitness
         f_fitness_path = self.experiment.immigration_directory if immigration else self.experiment.current_directory
         population, best_pop, tensors = self.fitness_func_wrap(population=population,
-                                                      f_path=f_fitness_path)
+                                                                f_path=f_fitness_path)
 
         total_time = self.recent_fitness_time + self.recent_tensor_time
 
