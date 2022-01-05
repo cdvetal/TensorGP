@@ -369,9 +369,9 @@ def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain = T
         return number_nodes, Node(value='scalar', terminal=True, children=numbers)
     else:
         x = stree[:-1].split("(", 1)
-        print("x:", x)
+        #print("x:", x)
         primitive = x[0]
-        print("x0:", x[0])
+        #print("x0:", x[0])
         if x[0][0] == '_':
             primitive = x[0][1::]
         args = x[1]
