@@ -287,8 +287,6 @@ class Node:
                 # both cases do the same if args == 1, this condition is here for speed concerns if
                 # the last dimension is very big (e.g. 2d(1024, 1024) we don't want color in that case)
 
-
-
             else:
                 return engref.terminal.set[self.value]
         else:
@@ -478,7 +476,7 @@ class Engine:
     def crossover(self, parent_1, parent_2):
         crossover_node = None
 
-        if self.engine_rng.random() < 0.75 and not parent_1.terminal:  # TODO: review, this is Koza's rule
+        if self.engine_rng.random() < self.koza_rule_prob and not parent_1.terminal:  # TODO: review, this is Koza's rule
             # function crossover
             parent_1_candidates = self.list_nodes(parent_1, True, add_funcs=True, add_terms=False, add_root=True)
             parent_1_chosen_node, _ = self.engine_rng.choice(parent_1_candidates)
@@ -553,7 +551,7 @@ class Engine:
                     return self.mutation_funcs[k](parent)
 
 
-    def random_terminal(self):
+    def old_random_terminal(self):
         _l = []
         if self.engine_rng.random() < self.scalar_prob:
             _v = 'scalar'
@@ -568,11 +566,14 @@ class Engine:
             _v = self.engine_rng.sample(list(self.terminal.set), 1)[0]
         return Node(terminal = True, children = _l, value = _v)
 
+    def random_terminal(self):
+        _, node = self.generate_program(method='full', max_nodes = 0, max_depth = 0)
+        return node
 
     def copy_node(self, n):
         return Node(value=n.value, terminal=n.terminal, children=n.children)
 
-    def promotion_mutation(self, parent):
+    def delete_mutation(self, parent):
         new_individual = copy.deepcopy(parent)
 
         # every node except last depth (terminals)
@@ -590,7 +591,7 @@ class Engine:
         return new_individual
 
 
-    def demotion_mutation(self, parent):
+    def insert_mutation(self, parent):
         new_individual = copy.deepcopy(parent)
         #print("[DEBUG D] Before:\t" + new_individual.get_str())
 
@@ -639,9 +640,9 @@ class Engine:
                 res += self.list_nodes(c, dep + 1, False, add_funcs, add_terms, add_root)
         return res
 
-    def subtree_mutation(self, parent):
+    # this is the same , except it does not go back to the loop
+    def hacky_subtree_mutation(self, parent):
         new_individual = copy.deepcopy(parent)
-        #candidates = self.get_candidates(new_individual, True)
         #print("\nindiv, ", new_individual.get_str())
         candidates = self.list_nodes(new_individual, root=True, add_funcs = True, add_terms=False, add_root=True)
 
@@ -655,6 +656,21 @@ class Engine:
         if not chosen_node.terminal:
             chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)] = mutation_node
         else: # means its root in this case
+            new_individual = mutation_node
+        return new_individual
+
+    def subtree_mutation(self, parent):
+        new_individual = copy.deepcopy(parent)
+        # candidates = self.get_candidates(new_individual, True)
+        # print("\nindiv, ", new_individual.get_str())
+        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
+
+        chosen_node, _ = self.engine_rng.choice(candidates)
+        _, mutation_node = self.generate_program('grow', -1, max_depth = self.max_subtree_dep, min_depth = self.min_subtree_dep, root=True)
+
+        if not chosen_node.terminal:
+            chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)] = mutation_node
+        else:  # means its root in this case
             new_individual = mutation_node
         return new_individual
 
@@ -676,16 +692,25 @@ class Engine:
                     del temp_tset[node.value]
                     node.value = self.engine_rng.choice(list(temp_tset))
         else:
-            arity_to_search = self.function.set[node.value][0]
+
+            this_arity = self.function.set[node.value][0]
+            arity_to_search = random.choice(list(self.function.arity.keys())) if self.replace_mode is 'dynamic_arities' else this_arity
+
             set_of_same_arities = self.function.arity[arity_to_search][:]
-            set_of_same_arities.remove(node.value)
+            if this_arity == arity_to_search:
+                set_of_same_arities.remove(node.value)
 
             if len(set_of_same_arities) > 0:
                 node.value = self.engine_rng.choice(set_of_same_arities)
+                if this_arity < arity_to_search:
+                    for i in range(this_arity, arity_to_search):
+                        node.children.append(self.random_terminal())
+                elif this_arity > arity_to_search:
+                    node.children = node.children[:arity_to_search]
 
-        if not node.terminal:
+        if not node.terminal and self.replace_prob > 0:
             for i in node.children:
-                if self.engine_rng.random() < 0.05:
+                if self.engine_rng.random() < self.replace_prob:
                     self.replace_nodes(i)
 
 
@@ -710,10 +735,6 @@ class Engine:
 
 
 
-    def restart(self, new_stop = 10):
-        self.last_stop = self.stop_value
-        self.stop_value = self.stop_value + new_stop
-
     def __init__(self,
                  fitness_func = None,
                  population_size = 100,
@@ -732,7 +753,8 @@ class Engine:
                  method = 'ramped half-and-half',
                  terminal_prob = 0.2,
                  scalar_prob = 0.55,
-                 uniform_scalar_prob = 0.7,
+                 uniform_scalar_prob = 0.5,
+                 koza_rule_prob = 0.9,
                  stop_criteria = 'generation',
                  stop_value = 10,
                  objective = 'minimizing', # TODO: this feature will be removed soon...on second thought maybe not
@@ -740,6 +762,8 @@ class Engine:
                  max_domain = 1,
                  bloat_control = 'full_dynamic_dep',
                  domain_mode = 'clip',
+                 replace_mode = 'dynamic_arities',
+                 replace_prob = 0.05,
                  const_range = None,
                  effective_dims = None,
                  operators = None,
@@ -763,6 +787,8 @@ class Engine:
                  initial_test_device = True,
                  previous_state = None,
                  var_func = None,
+                 stats_file_path = None,
+                 pop_file_path = None,
                  read_init_pop_from_file = None):
 
         # start timers
@@ -774,7 +800,6 @@ class Engine:
         self.elapsed_engine_time = 0
 
         # check for fitness func
-        #print("\n\n" + ("=" * 84))
         self.fitness_func = fitness_func
 
         # optional vars
@@ -786,6 +811,7 @@ class Engine:
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
         self.elitism = constrain(0, elitism, self.population_size)
+        self.koza_rule_prob = koza_rule_prob
         self.stop_criteria = stop_criteria
         self.save_graphics = save_graphics
         self.show_graphics = show_graphics
@@ -828,6 +854,8 @@ class Engine:
         self.experiment = Experiment(self.previous_state, seed)
         self.engine_rng = random.Random(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
+        self.replace_mode = replace_mode if replace_mode is 'dynamic_arities' else 'same_arity'
+        self.replace_prob = max(0.0, min(1.0, replace_prob))
         self.pop_file = read_init_pop_from_file
         self.write_log = write_log
         self.write_gen_stats = write_gen_stats
@@ -838,11 +866,13 @@ class Engine:
         self.save_state = 0
         self.last_stop = 0
         self.overall_stats_filename = "tensorgp_" + str(self.target_dims[0]) + "_" + str(self.experiment.seed) + '.csv'
+        self.stats_file_path = stats_file_path
+        self.pop_file_path = pop_file_path
 
 
         if mutation_funcs is None or mutation_funcs == []:
             mut_funcs_implemented = 4
-            self.mutation_funcs = [Engine.subtree_mutation, Engine.point_mutation, Engine.promotion_mutation, Engine.demotion_mutation]
+            self.mutation_funcs = [Engine.subtree_mutation, Engine.point_mutation, Engine.delete_mutation, Engine.insert_mutation]
             self.mutation_probs = np.linspace(0, 1, mut_funcs_implemented + 1)[:-1]
         else:
             self.mutation_funcs = []
@@ -928,7 +958,9 @@ class Engine:
         print(bcolors.OKGREEN + "Engine seed:", self.experiment.seed, bcolors.ENDC)
         self.update_engine_time()
 
-
+    def restart(self, new_stop = 10):
+        self.last_stop = self.stop_value
+        self.stop_value = self.stop_value + new_stop
 
     def generate_program(self, method, max_nodes, max_depth, min_depth = -1, root=True):
         terminal = False
@@ -1214,10 +1246,11 @@ class Engine:
         return population, best_pop, tensors
 
 
-    def write_pop_to_csv(self):
+    def write_pop_to_csv(self, fp = None):
         if self.write_gen_stats:
             genstr = "gen_" + str(self.current_generation).zfill(5)
-            fn = self.experiment.logging_diredctory + genstr + "_stats.csv"
+            fn = self.experiment.logging_diredctory if fp is None else fp
+            fn += genstr + "_stats.csv"
             with open(fn, mode='w', newline='') as file:
                 fwriter = csv.writer(file, delimiter=',')
                 ind = 0
@@ -1305,7 +1338,7 @@ class Engine:
             self.best_overall = self.best
 
         # write first gen data
-        self.write_pop_to_csv()
+        self.write_pop_to_csv(self.pop_file_path)
         self.save_state_to_file(self.experiment.logging_diredctory)
         if self.debug > 2: self.print_engine_state(force_print=True)
 
@@ -1425,7 +1458,7 @@ class Engine:
                          pops['nodes'][0], pops['nodes'][1], pops['nodes'][2], pops['nodes'][3], tensors])
             print(bcolors.OKBLUE + "[%7d, %10.6f, %10.6f, %10.6f, %10.6f, %10.3f, %10.6f, %10d, %10d, %10.3f, %10.6f, %10d, %10d, %10.6f, %10.6f, %10.6f]" %((self.current_generation,) + tuple(data[-1][:-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)), bcolors.ENDC)
 
-            self.write_pop_to_csv()
+            self.write_pop_to_csv(self.pop_file_path)
 
             # print engine state
             self.print_engine_state(force_print=False)
@@ -1435,7 +1468,7 @@ class Engine:
             self.experiment.seed += 1
 
         # write statistics(data) to csv
-        self.write_stats_to_csv(data)
+        self.write_stats_to_csv(data, self.stats_file_path)
 
         # print final stats
         if self.debug < 0:
@@ -1472,7 +1505,8 @@ class Engine:
         best_dep = []
         lcnt = 1
 
-        with open(self.experiment.working_directory + self.overall_stats_filename, mode='r') as csv_file:
+        fn = self.experiment.working_directory if self.stats_file_path is None else self.stats_file_path
+        with open(fn + self.overall_stats_filename, mode='r') as csv_file:
             csv_reader = csv.reader(csv_file)
             for row in csv_reader:
                 if self.debug > 10: print(row)
@@ -1514,9 +1548,10 @@ class Engine:
         plt.close(fig)
 
 
-    def write_stats_to_csv(self, data):
+    def write_stats_to_csv(self, data, fp = None):
         # evolutionary stats across generations
-        fn = self.experiment.working_directory + self.overall_stats_filename
+        fn = self.experiment.working_directory if fp is None else fp
+        fn += self.overall_stats_filename
         with open(fn, mode='a', newline='') as file:
             fwriter = csv.writer(file, delimiter=',')
             ind = 0
@@ -1667,6 +1702,8 @@ class Function_Set:
         self.debug = debug
         self.set = {}
         self.arity = {}
+        self.min_arity = float('inf')
+        self.max_arity = 0
 
         self.operators_def = {  # arity, function
             'abs': [1, resolve_abs_node],
@@ -1710,15 +1747,19 @@ class Function_Set:
             self.set[e] = fset_values
 
             arity_val = fset_values[0]
+            self.min_arity = min(self.min_arity, arity_val)
+            self.max_arity = max(self.max_arity, arity_val)
             if arity_val not in self.arity:
                 self.arity[arity_val] = []
             self.arity[arity_val].append(e)
 
     def add_to_set(self, operator_name, number_of_args, function_pointer):
+        self.min_arity = min(self.min_arity, number_of_args)
+        self.max_arity = max(self.max_arity, number_of_args)
         if operator_name in self.set and self.debug > 0:
             print(bcolors.WARNING + "[WARNING]:\tOperator already existing in current function_set, overriding..." , bcolors.ENDC)
             if operator_name in self.operators_def and self.debug > 1:
-                print(bcolors.WARNING + "[WARNING]:\tOverriding operator", operator_name, ", which is an engine defined operator. This is not reccomended." , bcolors.ENDC)
+                print(bcolors.WARNING + "[WARNING]:\tOverriding operator", operator_name, ", which is an engine defined operator. This is not recommended." , bcolors.ENDC)
             self.remove_from_set(operator_name)
 
         self.set[operator_name] = [number_of_args, function_pointer]
@@ -1732,9 +1773,18 @@ class Function_Set:
         else:
             if operator_name in self.operators_def and self.debug > 0:
                 print(bcolors.WARNING + "[WARNING]:\tRemoving operator", operator_name, ", which is an engine defined operator. I hope you know what you are doing." , bcolors.ENDC)
-            ari = self.set[operator_name][0]
-            del self.set[operator_name]
-            self.arity[ari].remove(operator_name)
+            if operator_name != 'mult': # we wont actually remove some operators because we might need them for scaling in the begginning
+                ari = self.set[operator_name][0]
+                del self.set[operator_name]
+                self.arity[ari].remove(operator_name)
+                if len(self.arity[ari]) == 0:
+                    del self.arity[ari]
+                    self.min_arity = int('inf')
+                    self.max_arity = 0
+                    if len(self.arity.keys()) > 0:
+                        for a in self.arity:
+                            self.min_arity = min(self.min_arity, a)
+                            self.max_arity = max(self.max_arity, a)
 
     def __str__(self):
         res = "\nFunction Set:\n"
