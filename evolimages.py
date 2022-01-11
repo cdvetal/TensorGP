@@ -116,16 +116,6 @@ if __name__ == "__main__":
                     read_init_pop_from_file = None)
                     #read_init_pop_from_file = "/home/scarlett/Documents/TensorGP/TensorGP-master/runs/run__2021_11_19__18_30_27_780__107305148598124544__images/run__2021_11_19__18_30_27_830__107305148598124544_final_pop.txt") # read predefined pop
 
-    #str_tree1 = "add(x, y)"  log(x), y, escolhe x dá x; x, y escolhe x dá x; x, log(y), escolhe x dá log(x)
-    #str_tree2 = "scalar(1.0)"
-    #str_tree1 = "x"
-    #_, tree1 = str_to_tree(str_tree1, engine.terminal.set, constrain_domain=False)
-    #print("Tree1: ", tree1.get_str())
-    #_, tree2 = str_to_tree(str_tree2, engine.terminal.set, constrain_domain=False)
-    #print("Tree2: ", tree2.get_str())
-    #indiv = engine.crossover(tree1, tree2)
-    #print("Res: ", indiv.get_str())
-
 
     # This experiment is comparatively slower, but bear inmind that the NIMA classifier takes
     # a considerable amount of time
