@@ -361,12 +361,11 @@ The following is a list of mutation and crossover operators currently available.
   > : **Returns:**
   > A mutated offspring, represented by its tree-graph genotype.
 
-  >`promotion_mutation`(_self_, _parent_):
-  >
+  >`delete_mutation`(_self_, _parent_):
   > : Selects a random non-terminal node from the parent tree and replaces it with one of its children. This will also erase any other children of the older node.
   > This method never deletes terminals as terminals do not have children.
   > On average, this method decreases the number of nodes and possibly the depth when compared to the parent tree.
-  > This is the opposite method to `demotion_mutation`.
+  > This is the opposite method to `insert_mutation`.
   > 
   > : **Parameters:**
   > A parent, represented by its tree-graph genotype. 
@@ -374,11 +373,11 @@ The following is a list of mutation and crossover operators currently available.
   > : **Returns:**
   > A mutated offspring, represented by its tree-graph genotype.
 
-  >`demotion_mutation`(_self_, _parent_):
+  >`insert_mutation`(_self_, _parent_):
   >
   > : Selects a random node (either terminal or non-terminal), replacing it with a randomly selected primitive from the function set. One of the new nodes' children will be the originally selected node, while the remaining children will be randomly generated terminals.
   > On average, this method increases the number of nodes and possibly the depth when compared to the parent tree.
-  > This is the opposite method to `promotion_mutation`.
+  > This is the opposite method to `delete_mutation`.
   > 
   > : **Parameters:**
   > A parent, represented by its tree-graph genotype. 
@@ -484,12 +483,24 @@ These are the possible parameters for the `Engine()` initialization.
 
   >**terminal_prob** (default=`0.2`): float, optional
   > 
-  > Probability of choosing any terminal from the function set. All scalars/constants are counted as only one terminal.
+  > Probability of choosing any terminal from the function set. All scalars/constants are counted as only one terminal. Between 0.0 and 1.0.
 
   >**scalar_prob** (default=`0.55`): float, optional
   > 
-  > Probability of generating a scalar/constant while selecting a terminal. All the remaining terminals have uniform probabilities to be chosen.
+  > Probability of generating a scalar/constant while selecting a terminal. All the remaining terminals have uniform probabilities to be chosen. Between 0.0 and 1.0.
 
+  >**koza_rule_prob** (default=`0.9`): float, optional
+  > 
+  > Determine the probability of choosing function over terminals to perform crossover. This is to prevent the scenario where most crossover operations happen between the terminals, which is common when tree in the population are generated using the full method. Standard value was proposed by John Koza, hence the name.
+
+  >**replace_prob** (default=`0.05`): float, optional
+  > 
+  > When operators such as point_mutation delete a node, every node in the corresponding subtree will also be replaced with a given probability. This parameter is that probability. Between 0.0 and 1.0.
+
+  >**replace_mode** (default=`0.05`): string, optional
+  > 
+  > Mode of replacing nodes. "dynamic_arity" mode can replace a function node for any other function while any other string will engage a mode where a function node can only be replaced by functions of the same arity. In this last mode, if the arity is bigger, new random terminals are added to the new children while if the new arity is smaller, the remaining children are removed.
+ 
   >**uniform_scalar_prob** (default=`0.7`): float, optional
   > 
   > Probability that the scalar/constant generated is constant across the shole domain.
