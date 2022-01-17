@@ -828,7 +828,7 @@ class Engine:
         self.terminal_prob = terminal_prob
         self.scalar_prob = scalar_prob
         self.uniform_scalar_prob = uniform_scalar_prob
-        self.max_retries = max_retries
+        self.max_retries = max_retries if max_retries != 0 else 10
 
         if self.bloat_control in ['full_dynamic_dep', 'dynamic_dep']:
             self.max_init_depth = 5 if (max_init_depth is None) else max_init_depth
@@ -1422,6 +1422,8 @@ class Engine:
                     #print("Eval ind: ", indiv_temp.get_str())
 
                     rcnt -= 1
+                if rcnt == 0:
+                    indiv_temp = parent['tree']
                 retries = self.max_retries - rcnt if self.max_retries > 0 else 1 - rcnt
                 retrie_cnt.append(retries)
 
