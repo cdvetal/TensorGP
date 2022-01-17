@@ -733,8 +733,6 @@ class Engine:
 
     ## ====================== init class ====================== ##
 
-
-
     def __init__(self,
                  fitness_func = None,
                  population_size = 100,
@@ -754,6 +752,7 @@ class Engine:
                  terminal_prob = 0.2,
                  scalar_prob = 0.55,
                  uniform_scalar_prob = 0.5,
+                 max_retries = 10,
                  koza_rule_prob = 0.9,
                  stop_criteria = 'generation',
                  stop_value = 10,
@@ -829,6 +828,7 @@ class Engine:
         self.terminal_prob = terminal_prob
         self.scalar_prob = scalar_prob
         self.uniform_scalar_prob = uniform_scalar_prob
+        self.max_retries = max_retries
 
         if self.bloat_control in ['full_dynamic_dep', 'dynamic_dep']:
             self.max_init_depth = 5 if (max_init_depth is None) else max_init_depth
@@ -1394,26 +1394,36 @@ class Engine:
 
                 # generate new individual with acceptable depth
 
-                rcnt = 0
-                while member_depth > self.max_tree_depth:
+                rcnt = self.max_retries
+                #while member_depth > self.max_tree_depth:
+                while rcnt != 0 and member_depth > self.max_tree_depth:
 
                     parent = self.tournament_selection()
-                    random_n = self.engine_rng.random()
-                    if random_n < self.crossover_rate:
+                    #random_n = self.engine_rng.random()
+                    indiv_temp = parent['tree']
+                    random_n1 = self.engine_rng.random()
+                    random_n2 = self.engine_rng.random()
+                    if random_n1 < self.crossover_rate:
                         parent_2 = self.tournament_selection()
                         indiv_temp = self.crossover(parent['tree'], parent_2['tree'])
                         #print("cross")
-                    elif (random_n >= self.crossover_rate) and (random_n < self.crossover_rate + self.mutation_rate):
+                    if random_n2 < self.mutation_rate:
                         indiv_temp = self.mutation(parent['tree'])
-                        #print("mut")
-                    else:
+                    if random_n1 >= self.crossover_rate and random_n1 >= self.crossover_rate:
                         indiv_temp = parent['tree']
+
+
+                    #elif (random_n >= self.crossover_rate) and (random_n < self.crossover_rate + self.mutation_rate):
+                        #print("mut")
+                    #else:
+                    #    indiv_temp = parent['tree']
 
                     member_depth, member_nodes = indiv_temp.get_depth()
                     #print("Eval ind: ", indiv_temp.get_str())
 
-                    rcnt+=1
-                retrie_cnt.append(rcnt)
+                    rcnt -= 1
+                retries = self.max_retries - rcnt if self.max_retries > 0 else 1 - rcnt
+                retrie_cnt.append(retries)
 
                 # add newly formed child
                 new_population.append({'tree': indiv_temp, 'fitness': 0, 'depth': member_depth, 'nodes':member_nodes})
