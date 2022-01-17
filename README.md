@@ -211,7 +211,7 @@ If instead of defining custom opertors, you simply want to defined a subset of t
 As an example:
 
 ```Python
-ops = {'add, 'sub'}
+ops = {'add', 'sub'}
 engine = Engine(operators =ops,
 		... # other parameters,
 		)
@@ -505,6 +505,10 @@ These are the possible parameters for the `Engine()` initialization.
   > 
   > Probability that the scalar/constant generated is constant across the shole domain.
   > *Note* A scalar/constant may not be constant through the whole domain if the `effective_dims` parameter is lower than the dimensionality of the problem. For instance, following the example of the `Terminal` subsection of the `Features` section, `scalar(255.0, 0.0, 0.0)` may correspond to a constant that translates to the color red, but is not a "uniform scalar" because it is defined as having the value 255 throughout the first index of the last dimension and 0 for the remaining values.  In this case, a uniform scalar would be `scalar(255.0, 255.0, 255.0)`, or just `scalar(255.0)` (the last value gets replicated to meet the arity of the scalar).
+
+  >**xax_retries** (default=`10`): float, optional
+  > 
+  > Defines a maximum number of tries to produce a valid individual. If the algorithm fails to produce an individual in the specified number of tries, the chosen parent is copied as it is. Set this parameter to -1 for infinite tries. 
   
   >**stop_criteria** (default=`'generation'`): default or `'fitness'`, optional
   > 
