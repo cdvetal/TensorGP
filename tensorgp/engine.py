@@ -442,14 +442,14 @@ class Experiment:
     def set_experiment_ID(self):
         return int(time.time() * 1000.0) << 16
 
-    def __init__(self, previous_state, seed = None, wd = delimiter + subdir + delimiter):
+    def __init__(self, file_state = None, seed = None, sub_wd = delimiter + subdir + delimiter, wd = None):
 
-        self.ID = self.set_experiment_ID() if (previous_state is None) else previous_state['ID']
+        self.ID = self.set_experiment_ID() if (file_state is None) else file_state['ID']
         self.seed = self.ID if (seed is None) else seed
         self.filename = self.get_experiment_filename() + "__images"
 
         try:
-            self.working_directory = os.getcwd() + wd + self.filename + delimiter
+            self.working_directory = (os.getcwd() + sub_wd + self.filename + delimiter) if wd is None else wd
             os.makedirs(self.working_directory)
         except FileExistsError:
             print(bcolors.WARNING + "[WARNING]:\tExperiment directory already exists, saving files to current directory." , bcolors.ENDC)
@@ -756,11 +756,11 @@ class Engine:
                  koza_rule_prob = 0.9,
                  stop_criteria = 'generation',
                  stop_value = 10,
-                 objective = 'minimizing', # TODO: this feature will be removed soon...on second thought maybe not
+                 objective = 'minimizing',
                  min_domain = -1,
                  max_domain = 1,
-                 bloat_control = 'full_dynamic_dep',
-                 domain_mode = 'clip',
+                 bloat_control = 'std',
+                 domain_mode = 'dynamic',
                  replace_mode = 'dynamic_arities',
                  replace_prob = 0.05,
                  const_range = None,
@@ -774,6 +774,7 @@ class Engine:
                  max_nodes = -1,
                  seed = None,
                  debug = 0,
+                 minimal_print = False,
                  save_graphics = True,
                  show_graphics = True,
                  save_best = True,
@@ -784,10 +785,11 @@ class Engine:
                  write_final_pop = False,
                  path_to_final_pop = None,
                  initial_test_device = True,
-                 previous_state = None,
+                 file_state = None,
                  var_func = None,
                  stats_file_path = None,
                  pop_file_path = None,
+                 run_dir_path = None,
                  read_init_pop_from_file = None):
 
         # start timers
@@ -822,6 +824,7 @@ class Engine:
         self.domain_mode = domain_mode
         self.immigration = immigration
         self.debug = debug
+        self.minial_print = minimal_print
         self.save_to_file = save_to_file
         self.max_nodes = max_nodes
         self.objective = objective
@@ -846,12 +849,15 @@ class Engine:
         self.min_subtree_dep = self.min_tree_depth if (min_subtree_dep is None) else min_subtree_dep
         if self.max_subtree_dep < self.min_subtree_dep: self.max_subtree_dep, self.min_subtree_dep = self.min_subtree_dep, self.max_subtree_dep
 
+        self.stats_file_path = stats_file_path
+        self.pop_file_path = pop_file_path
+        self.run_dir_path = run_dir_path
         self.target_dims = [128, 128] if (target_dims is None) else target_dims
         self.dimensionality = len(self.target_dims)
         self.effective_dims = self.dimensionality if effective_dims is None else effective_dims
         self.device = set_device(device=device) if initial_test_device else device # Check for available devices
-        self.previous_state = previous_state
-        self.experiment = Experiment(self.previous_state, seed)
+        self.file_state = file_state
+        self.experiment = Experiment(seed=seed, wd=self.run_dir_path)
         self.engine_rng = random.Random(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode is 'dynamic_arities' else 'same_arity'
@@ -866,8 +872,6 @@ class Engine:
         self.save_state = 0
         self.last_stop = 0
         self.overall_stats_filename = "tensorgp_" + str(self.target_dims[0]) + "_" + str(self.experiment.seed) + '.csv'
-        self.stats_file_path = stats_file_path
-        self.pop_file_path = pop_file_path
 
 
         if mutation_funcs is None or mutation_funcs == []:
@@ -954,9 +958,14 @@ class Engine:
 
         # update timers
         self.elapsed_init_time += time.time() - start_init
-        if self.debug > 0: print("Elapsed init time: ", self.elapsed_init_time)
+        if self.debug > 0 and not self.minial_print: print("Elapsed init time: ", self.elapsed_init_time)
         print(bcolors.OKGREEN + "Engine seed:", self.experiment.seed, bcolors.ENDC)
         self.update_engine_time()
+
+        self.population = []
+        self.tensors = []
+        self.best = {}
+        self.best_overall = {}
 
     def restart(self, new_stop = 10):
         self.last_stop = self.stop_value
@@ -1112,7 +1121,7 @@ class Engine:
     def fitness_func_wrap(self, population, f_path):
 
         # calculate tensors
-        #with tf.device(self.device):
+
         if self.debug > 4: print("\nEvaluating generation: " + str(self.current_generation))
         with tf.device(self.device):
             tensors, time_taken = self.calculate_tensors(population)
@@ -1124,6 +1133,7 @@ class Engine:
         # Notes: measuring time should not be up to the fit function writer. We should provide as much info as possible
         # Maybe best pop shouldnt be required
 
+
         population, best_ind = self.fitness_func(generation = self.current_generation,
                                                  population = population,
                                                  tensors = tensors,
@@ -1134,13 +1144,16 @@ class Engine:
                                                  stf = self.save_to_file,
                                                  target = self.target,
                                                  dim = self.dimensionality,
+                                                 best_o = self.best_overall,
                                                  debug = False if (self.debug == 0) else True)
         fitness_time = time.time() - _s
+
 
         # save best
         if self.save_best:
             fn = self.experiment.best_directory + "best_gen" + str(self.current_generation).zfill(5) + "_"
             save_image(tensors[best_ind], best_ind, fn, self.target_dims, addon='_best')
+
 
         self.elapsed_fitness_time += fitness_time
         self.recent_fitness_time = fitness_time
@@ -1298,65 +1311,72 @@ class Engine:
             save_image(t, index, fp, self.target_dims)
             index += 1
 
-    def run(self, stop_value = 10):
+    def run(self, stop_value = 10, start_from_last_pop = True):
 
-        print(bcolors.OKGREEN + "\n\n" +  "=" * 84, bcolors.ENDC)
+
+        if not self.minial_print:
+            print(bcolors.OKGREEN + "\n\n" +  "=" * 84, bcolors.ENDC)
         if self.save_state > 0:
             self.restart(stop_value)
+            #print("Restarting with best gen:", self.best['fitness'])
+            #self.print_population(self.population, minimal=True)
+            #print("Restarting with best overall:", self.best_overall['fitness'])
 
         if self.fitness_func is None:
             print(bcolors.FAIL + "[ERROR]:\tFitness function must be defined to run evolutionary process." , bcolors.ENDC)
             return
 
         # either generate initial pop randomly or read fromfile along with remaining experiment data
-        tensors = []
-        if self.previous_state is not None:
-            self.current_generation = self.previous_state['generations']
+        self.data = []
+        if self.file_state is not None:
+            self.current_generation = self.file_state['generations']
             self.experiment.seed += self.current_generation
 
             self.experiment.set_generation_directory(self.current_generation)
 
             # time counters
-            self.elapsed_init_time = self.previous_state['elapsed_init_time']
-            self.elapsed_fitness_time = self.previous_state['elapsed_fitness_time']
-            self.elapsed_tensor_time = self.previous_state['elapsed_tensor_time']
-            self.elapsed_engine_time = self.previous_state['elapsed_engine_time']
+            self.elapsed_init_time = self.file_state['elapsed_init_time']
+            self.elapsed_fitness_time = self.file_state['elapsed_fitness_time']
+            self.elapsed_tensor_time = self.file_state['elapsed_tensor_time']
+            self.elapsed_engine_time = self.file_state['elapsed_engine_time']
 
-            self.population = self.previous_state['population']
-            self.best = self.previous_state['best']
-            self.best_overall = self.previous_state['best_overall']
+            self.population = self.file_state['population']
+            self.best = self.file_state['best']
+            self.best_overall = self.file_state['best_overall']
 
         else:
-            self.experiment.set_generation_directory(self.current_generation)
-            self.population, self.best, tensors = self.initialize_population(self.max_init_depth,
-                                                                            self.min_init_depth,
-                                                                            self.population_size,
-                                                                            self.method,
-                                                                            self.max_nodes,
-                                                                            immigration=False,
-                                                                            read_from_file=self.pop_file)
-            self.best_overall = self.best
-
-        # write first gen data
-        self.write_pop_to_csv(self.pop_file_path)
-        self.save_state_to_file(self.experiment.logging_diredctory)
-        if self.debug > 2: self.print_engine_state(force_print=True)
-
-        # display gen statistics
-        data = []
-        pops = self.population_stats(self.population)
-        data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['fitness'][3],
-                     pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['depth'][3],
-                     pops['nodes'][0], pops['nodes'][1], pops['nodes'][2], pops['nodes'][3], tensors])
-        if self.save_state == 0:
-            print(bcolors.BOLD + bcolors.OKCYAN + "\n[       |                    FITNESS                    |                     DEPTH                     |                     NODES                     |              TIMINGS              ]" , bcolors.ENDC)
-            print(bcolors.BOLD + bcolors.OKCYAN +   "[  gen  |    avg    ,    std    , best(gen) , best(all) |    avg    ,    std    , best(gen) , best(all) |    avg    ,    std    , best(gen) , best(all) | generation,  fit eval ,tensor eval]\n" , bcolors.ENDC)
-        #print(bcolors.BOLD + bcolors.OKCYAN + "\n[  gen  ,     fit avg,   std,  best (gen),   dep avg,   dep std,  dep best,   nod avg,   nod std,  nod best, gen time, fit time,tensor time]\n" , bcolors.ENDC)
-        #print("[", self.current_generation, ",", data[-1][0], ",", data[-1][1], ",", data[-1][2], ",", data[-1][3], ",", data[-1][4], ",", data[-1][5], ",", data[-1][6], ",", data[-1][7], ",", data[-1][8], "]")
-        print(bcolors.OKBLUE + "[%7d, %10.6f, %10.6f, %10.6f, %10.6f, %10.3f, %10.6f, %10d, %10d, %10.3f, %10.6f, %10d, %10d, %10.6f, %10.6f, %10.6f]"%((self.current_generation,) + tuple(data[-1][:-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)) , bcolors.ENDC)
+            if not start_from_last_pop or self.save_state == 0:
+                self.experiment.set_generation_directory(self.current_generation)
+                self.population, self.best, self.tensors = self.initialize_population(self.max_init_depth,
+                                                                                      self.min_init_depth,
+                                                                                      self.population_size,
+                                                                                      self.method,
+                                                                                      self.max_nodes,
+                                                                                      immigration=False,
+                                                                                      read_from_file=self.pop_file)
+                self.best_overall = copy.deepcopy(self.best)
 
 
-        self.current_generation += 1
+                # write first gen data
+                self.write_pop_to_csv(self.pop_file_path)
+                self.save_state_to_file(self.experiment.logging_diredctory)
+                if self.debug > 2:
+                    self.print_engine_state(force_print=True)
+
+                # display gen statistics
+                pops = self.population_stats(self.population)
+                self.data.append([self.current_generation,
+                                  pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['fitness'][3],
+                                  pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['depth'][3],
+                                  pops['nodes'][0], pops['nodes'][1], pops['nodes'][2], pops['nodes'][3],
+                                  self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time])
+                if self.save_state == 0:
+                    print(bcolors.BOLD + bcolors.OKCYAN + "\n[       |                    FITNESS                    |                     DEPTH                     |                     NODES                     |              TIMINGS              ]" , bcolors.ENDC)
+                    print(bcolors.BOLD + bcolors.OKCYAN +   "[  gen  |    avg    ,    std    , best(gen) , best(all) |    avg    ,    std    , best(gen) , best(all) |    avg    ,    std    , best(gen) , best(all) | generation,  fit eval ,tensor eval]\n" , bcolors.ENDC)
+                print(bcolors.OKBLUE + "[%7d, %10.6f, %10.6f, %10.6f, %10.6f, %10.3f, %10.6f, %10d, %10d, %10.3f, %10.6f, %10d, %10d, %10.6f, %10.6f, %10.6f]"%tuple(self.data[-1]) , bcolors.ENDC)
+
+
+                self.current_generation += 1
 
         while self.condition():
 
@@ -1369,11 +1389,11 @@ class Engine:
             # immigrate individuals
             if self.current_generation % self.immigration == 0:
                 immigrants, _, _ = self.initialize_population(self.max_init_depth,
-                                                           self.min_init_depth,
-                                                           self.population_size,
-                                                           self.method,
-                                                           self.max_nodes,
-                                                           immigration = True, read_from_file = None)
+                                                              self.min_init_depth,
+                                                              self.population_size,
+                                                              self.method,
+                                                              self.max_nodes,
+                                                              immigration = True, read_from_file = None)
 
                 self.population.extend(immigrants)
                 self.population = self.engine_rng.sample(self.population, self.population_size)
@@ -1414,7 +1434,7 @@ class Engine:
 
 
                     #elif (random_n >= self.crossover_rate) and (random_n < self.crossover_rate + self.mutation_rate):
-                        #print("mut")
+                    #print("mut")
                     #else:
                     #    indiv_temp = parent['tree']
 
@@ -1435,14 +1455,15 @@ class Engine:
                 # print individual
                 if self.debug > 10: print("Individual " + str(current_individual) + ": " + indiv_temp.get_str())
 
+
             if self.debug >= 4:
                 rstd = np.average(np.array(retrie_cnt))
                 print("[DEBUG]:\tAverage evolutionary ops retries for generation " + str(self.current_generation) + ": " + str(rstd))
 
 
             # calculate fitness of the new population
-            new_population, self.best, tensors = self.fitness_func_wrap(population=new_population,
-                                                               f_path=self.experiment.current_directory)
+            new_population, self.best, self.tensors = self.fitness_func_wrap(population=new_population,
+                                                                             f_path=self.experiment.current_directory)
 
             # bloat_control
             # if self.bloat_control == 'full_dynamic_dep':
@@ -1451,13 +1472,15 @@ class Engine:
             #    self.max_tree_depth = max(self.best['depth'], self.max_tree_depth)
             # print("max tree depth: ", self.max_tree_depth)
 
-
             # update best and population
-            if self.objective_condition(self.best['fitness']): self.best_overall = self.best
+            if self.objective_condition(self.best['fitness']):
+                self.best_overall = copy.deepcopy(self.best)
             self.population = new_population
 
             # update engine time
             self.update_engine_time()
+
+            #if self.save_state == 0: self.print_population(self.population, minimal = True)
 
             # save engine state
             #if self.save_to_file != 0 and (self.current_generation % self.save_to_file) == 0:
@@ -1465,10 +1488,12 @@ class Engine:
 
             # add population data to statistics and display gen statistics
             pops = self.population_stats(self.population)
-            data.append([pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['fitness'][3],
-                         pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['depth'][3],
-                         pops['nodes'][0], pops['nodes'][1], pops['nodes'][2], pops['nodes'][3], tensors])
-            print(bcolors.OKBLUE + "[%7d, %10.6f, %10.6f, %10.6f, %10.6f, %10.3f, %10.6f, %10d, %10d, %10.3f, %10.6f, %10d, %10d, %10.6f, %10.6f, %10.6f]" %((self.current_generation,) + tuple(data[-1][:-1]) + (self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time)), bcolors.ENDC)
+            self.data.append([self.current_generation,
+                              pops['fitness'][0], pops['fitness'][1], pops['fitness'][2], pops['fitness'][3],
+                              pops['depth'][0], pops['depth'][1], pops['depth'][2], pops['depth'][3],
+                              pops['nodes'][0], pops['nodes'][1], pops['nodes'][2], pops['nodes'][3],
+                              self.recent_engine_time, self.recent_fitness_time, self.recent_tensor_time])
+            print(bcolors.OKBLUE + "[%7d, %10.6f, %10.6f, %10.6f, %10.6f, %10.3f, %10.6f, %10d, %10d, %10.3f, %10.6f, %10d, %10d, %10.6f, %10.6f, %10.6f]" %tuple(self.data[-1]), bcolors.ENDC)
 
             self.write_pop_to_csv(self.pop_file_path)
 
@@ -1480,12 +1505,12 @@ class Engine:
             self.experiment.seed += 1
 
         # write statistics(data) to csv
-        self.write_stats_to_csv(data, self.stats_file_path)
+        self.write_stats_to_csv(self.data, self.stats_file_path)
 
         # print final stats
         if self.debug < 0:
             self.print_engine_state(force_print=True)
-        else:
+        elif not self.minial_print:
             print(bcolors.OKGREEN + "\nElapsed Engine Time: \t" + str(self.elapsed_engine_time) + " sec.")
             print("\nElapsed Init Time: \t\t" + str(self.elapsed_init_time) + " sec.")
             print("Elapsed Tensor Time: \t" + str(self.elapsed_tensor_time) + " sec.")
@@ -1494,10 +1519,10 @@ class Engine:
             print("\nBest individual (overall):\n" + bcolors.OKCYAN + self.best_overall['tree'].get_str(), bcolors.ENDC)
 
         if self.save_graphics: self.graph_statistics()
-        print(bcolors.BOLD + bcolors.OKGREEN +  "=" * 84, "\n\n", bcolors.ENDC)
+        if not self.minial_print: print(bcolors.BOLD + bcolors.OKGREEN +  "=" * 84, "\n\n", bcolors.ENDC)
 
         self.save_state += 1
-        return data, tensors
+        return self.data, self.tensors
 
     def graph_statistics(self):
 
@@ -1570,7 +1595,7 @@ class Engine:
             for d in data:
                 if ind == 0 and self.save_state == 0:
                     file.write("[generation, fitness avg, fitness std, fitness generational best, fitness overall best, depth avg, depth std, depth generational best, depth overall best, generation time, fitness time, tensor time]\n")
-                fwriter.writerow([ind] + d[:-1])
+                fwriter.writerow(d)
                 ind += 1
 
         # overall engine stats
@@ -1664,13 +1689,19 @@ class Engine:
                 except IOError as e:
                     print(bcolors.FAIL + "[ERROR]:\tI/O error while writing engine state ({0}): {1}".format(e.errno, e.strerror) , bcolors.ENDC)
 
-    def print_population(self, population):
-        for i in range(len(population)):
-            p = population[i]
-            print("\nIndividual " + str(i) + ":")
-            print("Fitness:\t" + str(p['fitness']))
-            print("Depth:\t" + str(p['depth']))
-            print("Expression:\t" + str(p['tree'].get_str()))
+    def print_population(self, population, minimal = False):
+        if not minimal:
+            for i in range(len(population)):
+                p = population[i]
+                print("\nIndividual " + str(i) + ":")
+                print("Fitness:\t" + str(p['fitness']))
+                print("Depth:\t" + str(p['depth']))
+                print("Expression:\t" + str(p['tree'].get_str()))
+        else:
+            for i in range(len(population)):
+                p = population[i]
+                print(str(p['tree'].get_str()))
+
 
     def print_engine_state(self, force_print = False):
         if force_print and self.debug > 0:
