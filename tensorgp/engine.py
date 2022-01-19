@@ -788,6 +788,7 @@ class Engine:
                  file_state = None,
                  var_func = None,
                  stats_file_path = None,
+                 graphics_file_path = None,
                  pop_file_path = None,
                  run_dir_path = None,
                  read_init_pop_from_file = None):
@@ -850,6 +851,7 @@ class Engine:
         if self.max_subtree_dep < self.min_subtree_dep: self.max_subtree_dep, self.min_subtree_dep = self.min_subtree_dep, self.max_subtree_dep
 
         self.stats_file_path = stats_file_path
+        self.graphics_file_path = graphics_file_path
         self.pop_file_path = pop_file_path
         self.run_dir_path = run_dir_path
         self.target_dims = [128, 128] if (target_dims is None) else target_dims
@@ -1543,6 +1545,7 @@ class Engine:
         lcnt = 1
 
         fn = self.experiment.working_directory if self.stats_file_path is None else self.stats_file_path
+        fs = self.experiment.working_directory if self.graphics_file_path is None else self.graphics_file_path
         with open(fn + self.overall_stats_filename, mode='r') as csv_file:
             csv_reader = csv.reader(csv_file)
             for row in csv_reader:
@@ -1567,7 +1570,7 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Fitness across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(self.experiment.working_directory + 'Fitness.png')
+        plt.savefig(fs + 'Fitness.png')
         if self.show_graphics: plt.show()
         plt.close(fig)
 
@@ -1580,7 +1583,7 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Avg depth across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(self.experiment.working_directory + 'Depth.png')
+        plt.savefig(fs + 'Depth.png')
         if self.show_graphics: plt.show()
         plt.close(fig)
 
