@@ -1091,8 +1091,8 @@ class Engine:
                 population.append({'tree': t, 'fitness': 0, 'depth': dep, 'nodes': nod, 'tensor': [], 'valid': True, 'parents':[]})
         else:
             # -1 means no minimun depth, but the ramped 5050 default should be 2 levels
-            #_min_depth = 2 if (min_depth <= 0) else min_depth  # TODO: (commented)
-            _min_depth = min_depth
+            _min_depth = 2 if (min_depth <= 0) else min_depth  # TODO: (commented)
+            #_min_depth = min_depth
 
 
             divisions = max_depth - (_min_depth - 1)
@@ -1234,12 +1234,11 @@ class Engine:
         # open population files
         strs = []
         with open(read_from_file) as fp:
-            line = fp.readline()
+            line = fp.readline().replace("\n", "")
             cnt = 0
             while line and cnt < pop_size:
-                #line = line[:-1]
                 strs.append(line)
-                line = fp.readline()
+                line = fp.readline().replace("\n", "")
                 cnt += 1
             if cnt < pop_size < float('inf'):
                 print(bcolors.WARNING + "[WARNING]:\tCould only read " + str(cnt) + " expressions from population file " +
@@ -1247,6 +1246,7 @@ class Engine:
 
         # convert expressions to trees
         return self.generate_pop_from_expr(strs)
+    
 
     def initialize_population(self, max_depth, min_depth, individuals, method, max_nodes, immigration = False, read_from_file = None):
         #generate trees
@@ -1357,6 +1357,16 @@ class Engine:
             save_image(t, index, fp, self.target_dims)
             index += 1
 
+            
+    def generate_aligned(self, node_p1, node_p2):
+        if node_p1.value == node_p2.value and (node_p1.value != 'scalar' or node_p1.children == node_p2.children):
+            children = [self.generate_aligned(c1, c2) for c1, c2 in zip(node_p1.children, node_p2.children)]
+            return Node(node_p1.value, children, node_p1.terminal)
+        else:
+            children = [copy.deepcopy(node_p1), copy.deepcopy(node_p2), Node('scalar', [0.0], True)]
+            return Node('lerp', children, False)
+            
+            
     def run(self, stop_value = 10, start_from_last_pop = True):
 
         if not self.minial_print:
