@@ -139,7 +139,7 @@ engine = Engine(read_init_pop_from_file = 'pop.txt' ,  ...)
 with **"pop.txt"** containing the individuals to evolve represented as expressions, one per line:
 
 ```txt
-add(x, sub(y, scalar(1.5))
+add(x, sub(y, scalar(1.5)))
 sqrt(add(mult(x, x), mult(y, y)))
 scalar(1.5)
 ```
