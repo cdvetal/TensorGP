@@ -3,10 +3,10 @@ from tensorgp.engine import *
 if __name__ == "__main__":
 
     # This example uses TensorGP not as an evolutionary tool but to evaluate expressions
-    # converting them into images
+    # converting them into RGB images
 
-    resolution = [256, 256]
-    Engine(target_dims = resolution).generate_pop_images('images_file.txt', 'images_dir/')
+    resolution = [256, 256, 3]
+    Engine(effective_dims = 2, target_dims = resolution).generate_pop_images('images_file.txt', 'images_dir/')
 
 
     """
