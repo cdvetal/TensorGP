@@ -1,4 +1,4 @@
-from tensorgp.engine import *
+from tensorgp.tensorgp_v2 import *
 
 # NIMA classifier imports
 from keras.models import Model
@@ -9,22 +9,14 @@ from keras.applications.mobilenet import preprocess_input as preprocess_input_mo
 
 from utils.score_utils import mean_score, std_score
 
-
 # Fitness assessment with the NIMA classifier
 # https://github.com/idealo/image-quality-assessment
 def nima_classifier(**kwargs):
     # read parameters
     population = kwargs.get('population')
-    generation = kwargs.get('generation')
     tensors = kwargs.get('tensors')
-    f_path = kwargs.get('f_path')
     objective = kwargs.get('objective')
-    _resolution = kwargs.get('resolution')
-    _stf = kwargs.get('stf')
 
-    images = True
-
-    fn = f_path + "gen" + str(generation).zfill(5)
     fitness = []
     best_ind = 0
 
@@ -48,10 +40,6 @@ def nima_classifier(**kwargs):
 
         # scores
         for index in range(number_tensors):
-
-            if generation % _stf == 0:
-                save_image(tensors[index], index, fn, 3) # save image
-
             mean = mean_score(scores[index])
             std = std_score(scores[index])
             # fit = mean - std
@@ -64,9 +52,7 @@ def nima_classifier(**kwargs):
             population[index]['fitness'] = fit
 
     # save best indiv
-    if images:
-        save_image(tensors[best_ind], best_ind, fn, 3, addon='_best')
-    return population, population[best_ind]
+    return population, best_ind
 
 
 # if no function set is provided, the engine will use all internally available operators:
@@ -81,13 +67,13 @@ if __name__ == "__main__":
     resolution = [224, 224, 3]
 
     # GP params
-    dev = '/gpu:0'  # device to run, write '/cpu_0' to tun on cpu
-    number_generations = 400
-    pop_size = 100
+    dev = '/gpu:0'  # device to run, write '/cpu_0' to run on cpu
+    number_generations = 40
+    pop_size = 50
     tour_size = 3
     mut_prob = 0.1
     cross_prob = 0.9
-    max_tree_dep = 25
+    max_tree_dep = 15
     # tell the engine that the RGB does not explicitly make part of the terminal set
     edims = 2
 
@@ -100,7 +86,6 @@ if __name__ == "__main__":
 
     #seed = random.randint(0, 0x7fffffff)
     seed = 2020  # reproducibility
-
 
     # create engine
     engine = Engine(fitness_func=nima_classifier,

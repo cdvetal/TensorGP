@@ -1,4 +1,4 @@
-from tensorgp.engine import *
+from tensorgp.tensorgp_v2 import *
 
 # Fitness function to calculate RMSE from target (Pagie Polynomial)
 def calc_fit(**kwargs):
@@ -24,19 +24,14 @@ def calc_fit(**kwargs):
 
         start_ind = time.time()
         fit = tf_rmse(tensors[i], target).numpy()
-
         if condition():
             max_fit = fit
             best_ind = i
 
         times.append((time.time() - start_ind) * 1000.0)
-        fitness.append(fit)
         population[i]['fitness'] = fit
 
-    #if generation == gens:
-    #    save_image(tensors[best_ind], best_ind, fn, 2)
-
-    return population, population[best_ind]
+    return population, best_ind
 
 
 # Different types of function sets
@@ -49,7 +44,7 @@ if __name__ == "__main__":
 
     # GP params
     dev = '/gpu:0'  # device to run, write '/cpu_0' to tun on cpu
-    gens = 49  # 50
+    gens = 40  # 50
     pop_size = 50  # 50
     tour_size = 3
     mut_rate = 0.1
@@ -91,6 +86,7 @@ if __name__ == "__main__":
                                 method='ramped half-and-half',
                                 max_init_depth=max_init_depth,
                                 objective='minimizing',
+                                domain_mode='log',
                                 device=dev,
                                 stop_criteria='generation',
                                 stop_value=gens,
@@ -99,11 +95,15 @@ if __name__ == "__main__":
                                 max_domain=5,
                                 operators=normal_set,
                                 seed=seeds,
-                                save_to_file=10,
-                                save_graphics=False,
+                                save_to_file=500,
+                                save_to_file_image=20,
+                                save_to_file_log=10,
+                                save_graphics=True,
                                 show_graphics=False,
-                                write_log=False,
-                                write_gen_stats=False,
+                                save_image_best=True,
+                                save_image_pop=True,
+                                write_log=True,
+                                write_gen_stats=True,
                                 read_init_pop_from_file=None)
 
                 # run evolutionary process

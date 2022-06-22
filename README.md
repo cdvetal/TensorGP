@@ -139,7 +139,7 @@ engine = Engine(read_init_pop_from_file = 'pop.txt' ,  ...)
 with **"pop.txt"** containing the individuals to evolve represented as expressions, one per line:
 
 ```txt
-add(x, sub(y, scalar(1.5)))
+add(x, sub(y, scalar(1.5))
 sqrt(add(mult(x, x), mult(y, y)))
 scalar(1.5)
 ```
@@ -157,7 +157,7 @@ As a default, the variables needed to index a point within the problem domain ar
 ```python
 indexing_variables = 2
 domain_range = [256, 256] # two-dimensions
-my_terminal_set = Terminal_Set(indexing_variables, domain_range)
+my_terminal_set = Terminal_set(indexing_variables, domain_range)
 
 # Add an element to the set called var that is filled with ones (same thing as scalar(1))
 my_terminal_set.add_to_set("var", tf.constant(1.0, shape=resolution))
@@ -167,9 +167,7 @@ my_terminal_set.remove_from_set("y")
 
 engine = Engine(terminal_set=my_terminal_set,  ...)
 ```
-Where ```domain_range ``` defines the shape and size of the problem domain and ```indexing_variables``` defines how many dimensions you want to explicitly be able to index within your domain. If that sounded complicated don't worry, for most use cases just pass the number of dimensions of your domain.
-For instance, if you want to evolve over a 2D domain with the output being black and white images, you can simply pass ```domain_range = [256, 256]``` (no need for a 1 at the end) and then set the dimensionality to 2.
-However, if your domain has extra dimensionality for things like RGB colors channels you would define it, for example, as  ```domain_range = [256, 256, 3]```, but maybe you don't really want to have a ```z``` variable to index the color channels as part of the terminal set, so you set ```indexing_variables = 2```.  This is used in **"example_evoart.py"**, the only difference being that in that example the effective dimension is passed directly to the engine call using the ```effective_dims``` parameter.
+Where ```domain_range ``` defines the shape and size of the problem domain and ```indexing_variables``` defines how many dimensions you want to explicitly be able to index within your domain. If that sounded complicated don't worry, for most use cases just pass the number of dimensions of your domain. This can be useful if your domain has extra dimensionality for things like RGB colors channels, defined for example as  ```domain_range = [256, 256, 3]```, but you don't really want to have a ```z``` variable to index the color channels as part of the terminal set.  This is used in **"example_evoart.py"**, the only difference being that in that example the effective dimension is passed directly to the engine call using the ```effective_dims``` parameter.
 
 Another important aspect to point out is that scalars/constants are not really part of the terminal set, even though they are defined as terminals by the engine. Instead, TensorGP resorts to user-defined probabilities for the frequency of generated scalars (see ```terminal_prob```, ```scalar_prob``` and ```uniform_scalar_prob``` in the parameters section). 
 
@@ -181,7 +179,7 @@ You can define custom operators in TensorGP by defining a function as a composit
 ```python
 import tensorflow as tf
 
-def rmse_node(child1, child2, dims=[]):
+def rmse_node(child1, child2, dims=[])
 	return tf.sqrt(tf.reduce_mean(tf.square(child1 - child2)))
 ```
 
@@ -192,33 +190,17 @@ After this, the only thing to do is to define the new operator arity and add in 
 
 ```python
 # Define subset of internally implemented operators
-indexing_variables = 2
 primitives = {'add', 'sub', 'mult', 'div'}
-my_function_set = Function_Set(primitives, indexing_variables)
+my_function_set = Function_Set(primitives)
 
 # Add rmse_node, which has 2 arguments with name "rmse"
 my_function_set.add_to_set("rmse", 2, rmse_node)
 
 # You can also remove operators from the set
-my_function_set.remove_from_set("mult")
+my_function_set-remove_from_set("mult")
 
-engine = Engine(function_set=my_function_set,  ...)
+engine = Engine(operators=my_function_set,  ...)
 ```
-
-### Function Set
-
-If instead of defining custom opertors, you simply want to defined a subset of the existing ones, you can do so with the `operators` parameter.
-As an example:
-
-```Python
-ops = {'add', 'sub'}
-engine = Engine(operators =ops,
-		... # other parameters,
-		)
-engine.run()
-```
-
-Would start an evolutionary run with only the standard sub and add operators defined internally by the engine.
 
 
 For a full list of TensorFlow primitives, check the official [website](https://www.tensorflow.org/api_docs/python/tf/all_symbols).
@@ -262,7 +244,7 @@ TensorGP provides an extensive set of operators that are implemented out of box,
 | len | Euclidean distance | 2 | Image | Color | `sqrt(x^2 + y^2)`
 | lerp | Linear Interpolation | 3 | Image | Color | `x + (y - z) * frac(z)`
 
- [1] The warp operator is commonly used to deform images and is defined as a transformation that maps every element of a tensor to a different coordinate (two-dimensional warp is commonly to distort image shapes, see [Wikipedia](https://en.wikipedia.org/wiki/Image_warping)). This mapping is done according to an array of tensors with a size equal to the number of dimensions of the problem. Each of these tensors dictates where elements will end up within a given dimension. TensorGP implements a generalization of the warp operator that enables the mapping of any subset of dimensions.
+ [1] The warp operator is commonly used to deform images and is defined as a transformation that maps every element of a tensor to a different coordinate (two-dimensional warp is commonly to distort image shapes, see [Wikipedia](https://en.wikipedia.org/wiki/Image_warping)). This mapping is done according to an array of tensors with a size equal to the number of dimensions of the problem. Each of these tensors dictates where elements will end up within a given dimension. TensorGP implements a generalization of the warp operator that enables the mapping of any set of dimensions.
 
 ###  Fitness arguments
 List of engine variables that can be accessed by the fitness function through Python `**kwargs`:
@@ -361,11 +343,12 @@ The following is a list of mutation and crossover operators currently available.
   > : **Returns:**
   > A mutated offspring, represented by its tree-graph genotype.
 
-  >`delete_mutation`(_self_, _parent_):
+  >`promotion_mutation`(_self_, _parent_):
+  >
   > : Selects a random non-terminal node from the parent tree and replaces it with one of its children. This will also erase any other children of the older node.
   > This method never deletes terminals as terminals do not have children.
   > On average, this method decreases the number of nodes and possibly the depth when compared to the parent tree.
-  > This is the opposite method to `insert_mutation`.
+  > This is the opposite method to `demotion_mutation`.
   > 
   > : **Parameters:**
   > A parent, represented by its tree-graph genotype. 
@@ -373,11 +356,11 @@ The following is a list of mutation and crossover operators currently available.
   > : **Returns:**
   > A mutated offspring, represented by its tree-graph genotype.
 
-  >`insert_mutation`(_self_, _parent_):
+  >`demotion_mutation`(_self_, _parent_):
   >
   > : Selects a random node (either terminal or non-terminal), replacing it with a randomly selected primitive from the function set. One of the new nodes' children will be the originally selected node, while the remaining children will be randomly generated terminals.
   > On average, this method increases the number of nodes and possibly the depth when compared to the parent tree.
-  > This is the opposite method to `delete_mutation`.
+  > This is the opposite method to `promotion_mutation`.
   > 
   > : **Parameters:**
   > A parent, represented by its tree-graph genotype. 
@@ -483,32 +466,16 @@ These are the possible parameters for the `Engine()` initialization.
 
   >**terminal_prob** (default=`0.2`): float, optional
   > 
-  > Probability of choosing any terminal from the function set. All scalars/constants are counted as only one terminal. Between 0.0 and 1.0.
+  > Probability of choosing any terminal from the function set. All scalars/constants are counted as only one terminal.
 
   >**scalar_prob** (default=`0.55`): float, optional
   > 
-  > Probability of generating a scalar/constant while selecting a terminal. All the remaining terminals have uniform probabilities to be chosen. Between 0.0 and 1.0.
+  > Probability of generating a scalar/constant while selecting a terminal. All the remaining terminals have uniform probabilities to be chosen.
 
-  >**koza_rule_prob** (default=`0.9`): float, optional
-  > 
-  > Determine the probability of choosing function over terminals to perform crossover. This is to prevent the scenario where most crossover operations happen between the terminals, which is common when tree in the population are generated using the full method. Standard value was proposed by John Koza, hence the name.
-
-  >**replace_prob** (default=`0.05`): float, optional
-  > 
-  > When operators such as point_mutation delete a node, every node in the corresponding subtree will also be replaced with a given probability. This parameter is that probability. Between 0.0 and 1.0.
-
-  >**replace_mode** (default=`0.05`): string, optional
-  > 
-  > Mode of replacing nodes. "dynamic_arity" mode can replace a function node for any other function while any other string will engage a mode where a function node can only be replaced by functions of the same arity. In this last mode, if the arity is bigger, new random terminals are added to the new children while if the new arity is smaller, the remaining children are removed.
- 
   >**uniform_scalar_prob** (default=`0.7`): float, optional
   > 
   > Probability that the scalar/constant generated is constant across the shole domain.
   > *Note* A scalar/constant may not be constant through the whole domain if the `effective_dims` parameter is lower than the dimensionality of the problem. For instance, following the example of the `Terminal` subsection of the `Features` section, `scalar(255.0, 0.0, 0.0)` may correspond to a constant that translates to the color red, but is not a "uniform scalar" because it is defined as having the value 255 throughout the first index of the last dimension and 0 for the remaining values.  In this case, a uniform scalar would be `scalar(255.0, 255.0, 255.0)`, or just `scalar(255.0)` (the last value gets replicated to meet the arity of the scalar).
-
-  >**xax_retries** (default=`10`): float, optional
-  > 
-  > Defines a maximum number of tries to produce a valid individual. If the algorithm fails to produce an individual in the specified number of tries, the chosen parent is copied as it is. Set this parameter to -1 for infinite tries. 
   
   >**stop_criteria** (default=`'generation'`): default or `'fitness'`, optional
   > 
@@ -650,4 +617,4 @@ Authors of academic papers that use TensorGP for their experimenation are encour
 
 In case you are having trouble with a specific experimental setup (and already read the documentation), or if you have any suggestion/feedback about TensorGP you may contact:
 
-**fjrbaeta@dei.uc.pt**
+**fjrbaeta@student.dei.uc.pt**

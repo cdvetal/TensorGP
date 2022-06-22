@@ -385,6 +385,7 @@ def save_image(tensor, index, fn, dims, addon=''): # expects [min_domain, max_do
         print("[ERROR]:\tWrong rank in tensor")
     return path
 
+
 # just a wrapper for different expression types and strip preprocessing
 def str_to_tree(stree, terminal_set, constrain_domain=True):
     return str_to_tree_normal(stree.replace(" ", "") + "", terminal_set, 0, constrain_domain)
@@ -395,7 +396,6 @@ def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain = T
         return number_nodes, Node(value=stree, terminal=True, children=[])
     elif stree[:6] == 'scalar':
         numbers = [(constrain(float(x), _min_domain, _max_domain) if constrain_domain else float(x)) for x in re.split('\(|\)|,', stree)[1:-1]]
-
         return number_nodes, Node(value='scalar', terminal=True, children=numbers)
     else:
         x = stree[:-1].split("(", 1)
@@ -521,6 +521,7 @@ def get_largest_parent(depth, tree):
 class Engine:
 
     ## ====================== genetic operators ====================== ##
+
 
     def crossover(self, parent_1, parent_2):
         crossover_node = None
@@ -915,6 +916,7 @@ class Engine:
         self.file_state = file_state
         self.experiment = Experiment(seed=seed, wd=self.run_dir_path)
         self.engine_rng = random.Random(self.experiment.seed)
+        tf.random.set_seed(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
         self.replace_prob = max(0.0, min(1.0, replace_prob))
@@ -1032,6 +1034,7 @@ class Engine:
     def generate_program(self, method, max_nodes, max_depth, min_depth = -1, root=True):
         terminal = False
         children = []
+        #print(max_depth)
 
         # set primitive node
         # (max_depth * max_nodes) == 0 means if we either achieved maximum depth ( = 0) or there are no more
@@ -1069,6 +1072,7 @@ class Engine:
         return max_nodes, Node(value=primitive, terminal=terminal, children=children)
 
     def generate_population(self, individuals, method, max_nodes, max_depth, min_depth = -1):
+        print("Entering generate program (min, max)", min_depth, max_depth)
         if max_depth < 2:
             if max_depth <= 0:
                 return 0, []
@@ -1104,7 +1108,10 @@ class Engine:
 
             num_parts = parts
             mfull = math.floor(num_parts / 2)
+
+            print("generate program (min, max)", _min_depth, max_depth + 1)
             for i in range(_min_depth, max_depth + 1):
+                print("This is i", i)
 
                 # TODO: shouldn't i - 2 be i - min_depth? TEST or just i
                 #if i - 2 == load_balance_index:
@@ -1117,7 +1124,7 @@ class Engine:
 
                     if j >= mfull:
                         met = 'grow'
-                    #print("i: ", i, "min dep: ", min_depth)
+                    print("i: ", i, "min dep: ", _min_depth)
 
                     _n, t = self.generate_program(met, max_nodes, i, min_depth = min_depth)
                     tree_nodes = (max_nodes - _n)
@@ -1246,10 +1253,10 @@ class Engine:
 
         # convert expressions to trees
         return self.generate_pop_from_expr(strs)
-    
 
     def initialize_population(self, max_depth, min_depth, individuals, method, max_nodes, immigration = False, read_from_file = None):
         #generate trees
+        print("Init pop", max_depth)
 
         start_init_population = time.time()
 
@@ -1336,6 +1343,7 @@ class Engine:
 
     def generate_pop_images(self, expressions, fpath = None):
         fp = self.experiment.current_directory if fpath is None else fpath
+        os.makedirs(fp, exist_ok=True)
         #tensors = []
         if isinstance(expressions, str):
             pop, number_nodes, max_dep = self.generate_pop_from_file(expressions)
@@ -1357,7 +1365,7 @@ class Engine:
             save_image(t, index, fp, self.target_dims)
             index += 1
 
-            
+
     def generate_aligned(self, node_p1, node_p2):
         if node_p1.value == node_p2.value and (node_p1.value != 'scalar' or node_p1.children == node_p2.children):
             children = [self.generate_aligned(c1, c2) for c1, c2 in zip(node_p1.children, node_p2.children)]
@@ -1365,8 +1373,8 @@ class Engine:
         else:
             children = [copy.deepcopy(node_p1), copy.deepcopy(node_p2), Node('scalar', [0.0], True)]
             return Node('lerp', children, False)
-            
-            
+
+
     def run(self, stop_value = 10, start_from_last_pop = True):
 
         if not self.minial_print:
@@ -1409,12 +1417,12 @@ class Engine:
                 self.experiment.set_generation_directory(self.current_generation)
 
                 population, best = self.initialize_population(self.max_init_depth,
-                                                                      self.min_init_depth,
-                                                                      self.population_size - start_from_last_pop,
-                                                                      self.method,
-                                                                      self.max_nodes,
-                                                                      immigration=False,
-                                                                      read_from_file=self.pop_file)
+                                                              self.min_init_depth,
+                                                              self.population_size - start_from_last_pop,
+                                                              self.method,
+                                                              self.max_nodes,
+                                                              immigration=False,
+                                                              read_from_file=self.pop_file)
 
                 if start_from_last_pop > 0:
                     if self.objective == 'minimizing':
@@ -1451,6 +1459,18 @@ class Engine:
 
 
                 self.current_generation += 1
+
+        print("Initial pop: ")
+        self.print_population(population, True)
+        print()
+
+        for i in range(len(population) - 1):
+            aligned_ind = self.generate_aligned(population[i]['tree'], population[i + 1]['tree'])
+            print("Aligned ind TADA:", aligned_ind.get_str())
+
+        print()
+        print("Initial pop: ")
+        self.print_population(population, True)
 
         while self.condition():
 
