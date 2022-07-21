@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     # GP params
     dev = '/gpu:0'  # device to run, write '/cpu_0' to run on cpu
-    number_generations = 20
+    number_generations = 40
     pop_size = 10
     tour_size = 3
     mut_prob = 0.1
