@@ -1,4 +1,4 @@
-from tensorgp.tensorgp_v2 import *
+from tensorgp.engine import *
 
 # NIMA classifier imports
 from keras.models import Model
