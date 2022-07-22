@@ -1,4 +1,4 @@
-from tensorgp.engine import *
+from tensorgp.tensorgp_v2 import *
 
 # Fitness function to calculate RMSE from target (Pagie Polynomial)
 def calc_fit(**kwargs):
@@ -56,9 +56,8 @@ if __name__ == "__main__":
 
     # problems
     pagie = "add(div(scalar(1.0), add(scalar(1.0), div(scalar(1.0), mult(mult(x, x), mult(x, x))))), div(scalar(1.0), add(scalar(1.0), div(scalar(1.0), mult(mult(y, y), mult(y, y))))))"
-    keijzer11 = "add(mult(x, y), sin(mult(sub(x, scalar(1.0), sub(y, scalar(1.0)))))"
-    korns3 = "add(scalar(-5.41), mult(scalar(4.9), div(sub(v, add(x, div(y, w))), mult(scalar(3.0, w)))))"
-
+    keijzer11 = "add(mult(x, var), sin(mult(sub(x, scalar(1.0)), sub(var, scalar(1.0)))))"
+    
     problems = [pagie]  # Add to run more problems
 
     # Domains dimensions
@@ -81,7 +80,7 @@ if __name__ == "__main__":
                                 crossover_rate=cross_rate,
                                 max_tree_depth=max_tree_dep,
                                 target_dims=res,
-                                target=pagie,
+                                target=problems[0],
                                 #elitism=elite_size,
                                 method='ramped half-and-half',
                                 max_init_depth=max_init_depth,
