@@ -1,4 +1,4 @@
-from tensorgp.tensorgp_v2 import *
+from tensorgp.engine import *
 
 # Fitness function to calculate RMSE from target (Pagie Polynomial)
 def calc_fit(**kwargs):
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     # GP params
     dev = '/gpu:0'  # device to run, write '/cpu_0' to tun on cpu
     gens = 40  # 50
-    pop_size = 50  # 50
+    pop_size = 10  # 50
     tour_size = 3
     mut_rate = 0.1
     cross_rate = 0.9
