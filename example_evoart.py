@@ -56,9 +56,9 @@ def nima_classifier(**kwargs):
 
 
 # if no function set is provided, the engine will use all internally available operators:
-fset = {'abs', 'add', 'and', 'clip', 'cos', 'div', 'exp', 'frac', 'if', 'len', 'lerp', 'log',
-        'max', 'mdist', 'min', 'mod', 'mult', 'neg', 'or', 'pow', 'sign', 'sin', 'sqrt', 'sstep',
-        'sstepp', 'step', 'sub', 'tan', 'xor'}
+#fset = {'abs', 'add', 'and', 'clip', 'cos', 'div', 'exp', 'frac', 'if', 'len', 'lerp', 'log',
+#        'max', 'mdist', 'min', 'mod', 'mult', 'neg', 'or', 'pow', 'sign', 'sin', 'sqrt', 'sstep',
+#        'sstepp', 'step', 'sub', 'tan', 'warp', 'xor'}
 
 
 if __name__ == "__main__":
@@ -95,7 +95,6 @@ if __name__ == "__main__":
                     crossover_rate=cross_prob,
                     max_tree_depth = max_tree_dep,
                     target_dims=resolution,
-                    operators = fset,
                     method='ramped half-and-half',
                     objective='maximizing',
                     device=dev,
