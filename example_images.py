@@ -1,4 +1,4 @@
-from tensorgp.tensorgp_v2 import *
+from tensorgp.engine import *
 
 if __name__ == "__main__":
 
