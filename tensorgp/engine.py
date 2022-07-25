@@ -1117,7 +1117,12 @@ class Engine:
                 else:
                     children = [self.engine_rng.uniform(self.erc_min, self.erc_max) for i in range(self.terminal.dimension)]
             else:
-                primitive = self.engine_rng.choice(list(self.terminal.set)) # TODO: what is this???
+                #print("Lets print the current terminal set list:")
+                #print(list(self.terminal.set))
+                #print("")
+                
+                primitive = self.engine_rng.choice(list(self.terminal.set))
+
             terminal = True
         else:
             primitive = self.engine_rng.choice(list(self.function.set))
@@ -1132,18 +1137,15 @@ class Engine:
         return max_nodes, Node(value=primitive, terminal=terminal, children=children)
 
     def generate_population(self, individuals, method, max_nodes, max_depth, min_depth = -1):
-        #print("Entering generate program (min, max)", min_depth, max_depth)
-        if max_depth < 2:
-            if max_depth <= 0:
-                return 0, []
-            #if max_depth == 1:
-            #    method = 'full'
+        # print("Entering generate program (min, max)", min_depth, max_depth)
+
+        if max_depth <= min_depth:
+            max_depth, min_depth = min_depth, max_depth
 
         population = []
         pop_nodes = 0
 
-
-        if method == 'full' or method == 'grow':
+        if not ((method == 'ramped half-and-half') and (max_depth >= 1)):
             for i in range(individuals):
 
                 # TODO: why was this without min_depth? TEST
@@ -1156,11 +1158,11 @@ class Engine:
                 population.append(new_individual(t, fitness=0, depth=dep, nodes=nod))
         else:
             # -1 means no minimun depth, but the ramped 5050 default should be 2 levels
-            _min_depth = 2 if (min_depth <= 0) else min_depth  # TODO: (commented)
-            #_min_depth = min_depth
+            _min_depth = 0 if (min_depth <= -1) else min_depth
 
 
-            divisions = max_depth - (_min_depth - 1)
+            # divisions = max_depth - (_min_depth - 1)
+            divisions = max_depth - (_min_depth) + 1
             parts = math.floor(individuals / divisions)
             last_part = individuals - (divisions - 1) * parts
             #load_balance_index = (max_depth - 1) - (last_part - parts)
@@ -1517,6 +1519,9 @@ class Engine:
                 self.population = population
                 self.best = best
                 self.best_overall = copy.deepcopy(self.best)
+
+                # Print Initial Population
+                # self.print_population(population, False)
 
                 # write first gen data
                 self.write_pop_to_csv(self.pop_file_path)
