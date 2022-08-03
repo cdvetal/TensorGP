@@ -1,4 +1,4 @@
-from tensorgp.engine import *
+from tensorgp.tensorgp_v2 import *
 
 # NIMA classifier imports
 from keras.models import Model
@@ -68,8 +68,8 @@ if __name__ == "__main__":
 
     # GP params
     dev = '/gpu:0'  # device to run, write '/cpu_0' to run on cpu
-    number_generations = 40
-    pop_size = 10
+    number_generations = 50
+    pop_size = 50
     tour_size = 3
     mut_prob = 0.1
     cross_prob = 0.9
@@ -95,15 +95,18 @@ if __name__ == "__main__":
                     crossover_rate=cross_prob,
                     max_tree_depth = max_tree_dep,
                     target_dims=resolution,
+                    elitism=1,
                     method='ramped half-and-half',
                     objective='maximizing',
+                    domain_mode='clip',
+                    bloat_control='off',
                     device=dev,
                     stop_criteria='generation',
                     stop_value=number_generations,
                     effective_dims = edims,
                     seed = seed,
                     debug=0,
-                    save_to_file=10, # save all images from each 10 generations
+                    save_to_file=1, # save all images from each 10 generations
                     save_graphics=True,
                     show_graphics=False,
                     read_init_pop_from_file=None)
