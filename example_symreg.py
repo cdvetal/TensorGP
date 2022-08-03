@@ -44,8 +44,8 @@ if __name__ == "__main__":
 
     # GP params
     dev = '/gpu:0'  # device to run, write '/cpu_0' to tun on cpu
-    gens = 40  # 50
-    pop_size = 10  # 50
+    gens = 20  # 50
+    pop_size = 50  # 50
     tour_size = 3
     mut_rate = 0.1
     cross_rate = 0.9
@@ -81,7 +81,7 @@ if __name__ == "__main__":
                                 max_tree_depth=max_tree_dep,
                                 target_dims=res,
                                 target=problems[0],
-                                #elitism=elite_size,
+                                elitism=elite_size,
                                 method='ramped half-and-half',
                                 max_init_depth=max_init_depth,
                                 objective='minimizing',
@@ -94,7 +94,7 @@ if __name__ == "__main__":
                                 max_domain=5,
                                 operators=normal_set,
                                 seed=seeds,
-                                save_to_file=500,
+                                save_to_file=10,
                                 save_to_file_image=20,
                                 save_to_file_log=10,
                                 save_graphics=True,
@@ -107,3 +107,6 @@ if __name__ == "__main__":
 
                 # run evolutionary process
                 engine.run()
+
+                # test a rerun
+                engine.run(stop_value=10)
