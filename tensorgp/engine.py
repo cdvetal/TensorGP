@@ -1564,6 +1564,7 @@ class Engine:
             retrie_cnt = []
             for current_individual in range(self.population_size - self.elitism):
 
+
                 rcnt = 0
                 if self.bloat_control == "off":
                     member_depth = float('inf')
@@ -1575,8 +1576,29 @@ class Engine:
                 else:
                     indiv_temp, plist = self.selection()
                     member_depth, member_nodes = indiv_temp.get_depth()
-
                 temp_population.append(new_individual(indiv_temp, fitness=0, depth=member_depth, nodes=member_nodes, valid=False, parents=plist))
+
+                # # old method for selection 
+                # member_depth = float('inf')
+                # # generate new individual with acceptable depth
+                # rcnt = 0
+                # while member_depth > self.max_tree_depth:
+
+                #     parent = self.tournament_selection()
+                #     random_n = self.engine_rng.random()
+                #     if random_n < self.crossover_rate:
+                #         parent_2 = self.tournament_selection()
+                #         indiv_temp = self.crossover(parent['tree'], parent_2['tree'])
+                #     elif (random_n >= self.crossover_rate) and (random_n < self.crossover_rate + self.mutation_rate):
+                #         indiv_temp = self.mutation(parent['tree'])
+                #     else:
+                #         indiv_temp = parent['tree']
+
+                #     member_depth, member_nodes = indiv_temp.get_depth()
+                #     rcnt+=1
+                # retrie_cnt.append(rcnt)
+                # temp_population.append(new_individual(indiv_temp, fitness=0, depth=member_depth, nodes=member_nodes, valid=False, parents=[]))
+
                 if self.debug > 10: print("Individual " + str(indiv_temp) + ": " + indiv_temp.get_str())
 
             # Print average retrie count
@@ -1801,6 +1823,10 @@ class Engine:
                     file.write("[generation, fitness avg, fitness std, fitness generational best, fitness overall best, depth avg, depth std, depth generational best, depth overall best, generation time, fitness time, tensor time]\n")
                 fwriter.writerow(d)
                 ind += 1
+        
+        fn = self.experiment.working_directory + "timings.csv" if self.experiment.timings_fp is None else self.experiment.timings_fp
+        with open(fn, mode='a', newline='') as file:
+            fwriter = csv.writer(file, delimiter=',')        
             if self.save_state == 0:
                 file.write("[resolution, seed, initialization time, tensor time, fitness time, total, engine time]\n")
             fwriter.writerow([self.target_dims[0], self.experiment.seed, self.elapsed_init_time,
