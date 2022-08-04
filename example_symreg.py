@@ -1,4 +1,4 @@
-from tensorgp.tensorgp_v2 import *
+from tensorgp.engine import *
 
 # Fitness function to calculate RMSE from target (Pagie Polynomial)
 def calc_fit(**kwargs):
@@ -92,6 +92,9 @@ if __name__ == "__main__":
                                 effective_dims=2,
                                 min_domain=-5,
                                 max_domain=5,
+                                codomain = [0, 2], # pagie codomain for the specified [-5, 5 ] range
+                                do_final_transform = True,
+                                final_transform = [0, 255],
                                 operators=normal_set,
                                 seed=seeds,
                                 save_to_file=10,
@@ -107,6 +110,3 @@ if __name__ == "__main__":
 
                 # run evolutionary process
                 engine.run()
-
-                # test a rerun
-                engine.run(stop_value=10)
