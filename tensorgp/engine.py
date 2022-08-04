@@ -383,7 +383,7 @@ def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain = T
     if stree in terminal_set:
         return number_nodes, Node(value=stree, terminal=True, children=[])
     elif stree[:6] == 'scalar':
-        numbers = [(constrain(_min_domain, float(x), _max_domain) if constrain_domain else float(x)) for x in re.split('\(|\)|,', stree)[1:-1]]
+        numbers = [(constrain(_codomain[0], float(x), _codomain[1]) if constrain_domain else float(x)) for x in re.split('\(|\)|,', stree)[1:-1]]
         #numbers = [float(x) for x in re.split('\(|\)|,', stree)[1:-1]]
         return number_nodes, Node(value='scalar', terminal=True, children=numbers)
     else:
@@ -1033,19 +1033,17 @@ class Engine:
             else:
                 self.var_func = var_func
             self.terminal = Terminal_Set(self.effective_dims, self.target_dims, engref=self, function_ptr_to_var_node=self.var_func)
-
-
+        
         #print("x tensor: ", self.terminal.set['x'])
         #print("y tensor: ", self.terminal.set['y'])
 
-
         if isinstance(target, str):
-            target = 'mult(scalar(127.5), ' + target + ')'
+            # target = 'mult(scalar(127.5), ' + target + ')'
             _, tree = str_to_tree(target, self.terminal.set, constrain_domain=False)
 
             with tf.device(self.device):
-                #self.target = self.final_transform_domain(tree.get_tensor(self))
-                self.target = tf.cast(tree.get_tensor(self), tf.float32) # cast to an int tensor
+                self.target = tf.cast(self.get_final_transform(tree.get_tensor(self)), tf.float32) # cast to an int tensor
+                # self.target = tf.cast(tree.get_tensor(self) * 127.5, tf.float32) # cast to an int tensor
         else:
             self.target = target
 
@@ -1583,7 +1581,7 @@ class Engine:
             temp_population = []
             retrie_cnt = []
             for current_individual in range(self.population_size - self.elitism):
-                
+
                 rcnt = 0
                 if self.bloat_control == "off":
                     member_depth = float('inf')
