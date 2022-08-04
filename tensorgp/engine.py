@@ -55,9 +55,14 @@ _tgp_np_debug = 1
 _tgp_delimiter = os.path.sep
 _tgp_subdir = "runs"
 
-_min_domain = -1
-_max_domain = 1
+_min_domain = -1.0
+_max_domain = 1.0
 _domain_delta = _max_domain - _min_domain
+_codomain = [-1.0, 1.0]
+_codomain_delta = _codomain[1] - _codomain[0]
+_final_transform = [0.0, 255.0]
+_final_transform_delta = _final_transform[1] - _final_transform[0]
+
 
 # np debug options
 if _tgp_np_debug:
@@ -198,19 +203,19 @@ def resolve_sstepp_node(child1, dims=[]):
     x = resolve_clamp(child1)
     x2 = tf.square(x)
     return tf.add(tf.multiply(x2,
-                              tf.subtract(tf.scalar_mul(6.0 * _domain_delta, tf.multiply(x, x2)),
-                                          tf.subtract(tf.scalar_mul(15.0 * _domain_delta, x2),
-                                                      tf.scalar_mul(10.0 * _domain_delta, x)))),
-                  tf.constant(_min_domain, dtype=tf.float32, shape=dims))
+                              tf.subtract(tf.scalar_mul(6.0 * _codomain_delta, tf.multiply(x, x2)),
+                                          tf.subtract(tf.scalar_mul(15.0 * _codomain_delta, x2),
+                                                      tf.scalar_mul(10.0 * _codomain_delta, x)))),
+                  tf.constant(_codomain[0], dtype=tf.float32, shape=dims))
 
 # return x * x * (3 - 2 * x);
 # simplified to (6x2 - 4x3) to minimize TF operations
 def resolve_sstep_node(child1, dims=[]):
     x = resolve_clamp(child1)
     x2 = tf.square(x)
-    return tf.add(tf.subtract(tf.scalar_mul(3.0 * _domain_delta, x2),
-                              tf.scalar_mul(2.0 * _domain_delta, tf.multiply(x2, x))),
-                  tf.constant(_min_domain, dtype=tf.float32, shape=dims))
+    return tf.add(tf.subtract(tf.scalar_mul(3.0 * _codomain_delta, x2),
+                              tf.scalar_mul(2.0 * _codomain_delta, tf.multiply(x2, x))),
+                  tf.constant(_codomain[0], dtype=tf.float32, shape=dims))
 
 def resolve_step_node(child1, dims=[]):
     return tf.where(child1 < 0.0,
@@ -218,7 +223,7 @@ def resolve_step_node(child1, dims=[]):
                     tf.constant(1.0, dtype=tf.float32, shape=dims))
 
 def resolve_clamp(tensor):
-    return tf.clip_by_value(tensor, clip_value_min=_min_domain, clip_value_max=_max_domain)
+    return tf.clip_by_value(tensor, clip_value_min=_codomain[0], clip_value_max=_codomain[1])
     #return tf.cast(tf.cast(tensor, tf.uint8), tf.float32)
 
 def resolve_frac_node(child1, dims=[]):
@@ -245,6 +250,7 @@ def old_tf_rmse(child1, child2):
     mse = math.sqrt(mse)
     return mse
 
+# The idea is that this is always the same, so compile
 @tf.function
 def tf_rmse(child1, child2):
     child1 = tf.scalar_mul(1/127.5, child1)
@@ -344,15 +350,17 @@ def constrain(a, n, b):
     return min(max(n, a), b)
 
 
+def get_np_array(tensor):
+    return np.array(tensor, dtype='uint8')
+
+
 def save_image(tensor, index, fn, dims, sufix='', extension = "png", BGR = False): # expects [min_domain, max_domain]
     
     if extension not in ["png", "jpg", "jpeg"]:
         extension = "png"
     path = fn + "_ind" + str(index).zfill(5) + sufix + "." + extension
+    aux = get_np_array(tensor)
 
-    final_tensor = tf.math.subtract(tf.convert_to_tensor(tensor), tf.constant(_min_domain, tf.float32, dims))
-    final_tensor = tf.scalar_mul(255 / _domain_delta, final_tensor)
-    aux = np.array(final_tensor , dtype='uint8')
     try:
         if len(dims) == 2:
             Image.fromarray(aux, mode="L").save(path) # no color
@@ -489,21 +497,6 @@ class Experiment:
                 print(bcolors.WARNING + "[WARNING]:\tOSError while creating directory", bcolors.ENDC)
             print(bcolors.WARNING + "[WARNING]:\tFilename: " + self.working_directory , bcolors.ENDC)
             self.working_directory = os.getcwd()
-
-
-        # # Old filesystem
-        # self.current_directory = self.working_directory
-        # self.generations_directory = self.working_directory + "generations" + _tgp_delimiter
-        # self.immigration_directory = self.generations_directory + "immigration" + _tgp_delimiter
-        # self.logging_directory = self.working_directory + "logs" + _tgp_delimiter
-        # self.best_directory = self.working_directory + "best" + _tgp_delimiter
-        # try:
-        #     os.makedirs(self.generations_directory)
-        #     os.makedirs(self.immigration_directory)
-        #     os.makedirs(self.logging_diredctory)
-        #     os.makedirs(self.best_directory)
-        # except FileExistsError:
-        #     print(bcolors.WARNING + "[WARNING]:\tTried to create a directory that already exists!" , bcolors.ENDC)
 
         # New Filesystem
         self.current_directory = self.working_directory
@@ -850,6 +843,9 @@ class Engine:
                  objective = 'minimizing',
                  min_domain = -1,
                  max_domain = 1,
+                 codomain = None,
+                 final_transform = None,
+                 do_final_transform = False,
                  bloat_control = 'std',
                  bloat_mode = 'depth',
                  dynamic_limit = 8,
@@ -1000,11 +996,22 @@ class Engine:
 
         # technically globals are not needed but it helps with external operators
         global _domain_delta, _min_domain, _max_domain
+        global _codomain_delta, _codomain, _final_transform, _final_transform_delta
         if min_domain is not None:
             _min_domain = min_domain
         if max_domain is not None:
             _max_domain = max_domain
         _domain_delta = max_domain - min_domain
+        if (codomain is not None) and isinstance(codomain, list):
+            _codomain = [float(codomain[0]), float(codomain[1])]
+        _codomain_delta = _codomain[1] - _codomain[0]
+        
+        self.do_final_transform = do_final_transform
+        if self.do_final_transform:
+            if (final_transform is not None) and isinstance(final_transform, list):
+                _final_transform = [float(final_transform[0]), float(final_transform[1])]
+            _final_transform_delta = _final_transform[1] - _final_transform[0]
+
 
         if const_range is None or len(const_range) < 1:
             self.erc_min = _min_domain
@@ -1039,7 +1046,6 @@ class Engine:
             with tf.device(self.device):
                 #self.target = self.final_transform_domain(tree.get_tensor(self))
                 self.target = tf.cast(tree.get_tensor(self), tf.float32) # cast to an int tensor
-                #self.target = pagie_poly(self.terminal.set, self.target_dims)
         else:
             self.target = target
 
@@ -1136,6 +1142,7 @@ class Engine:
 
         return max_nodes, Node(value=primitive, terminal=terminal, children=children)
 
+
     def generate_population(self, individuals, method, max_nodes, max_depth, min_depth = -1):
         # print("Entering generate program (min, max)", min_depth, max_depth)
 
@@ -1203,7 +1210,8 @@ class Engine:
         return pop_nodes, population
 
 
-    def domain_range(self, final_tensor):
+    def codomain_range(self, final_tensor):
+        # 'dynamic' and 'mod' modes normmalize to 0..1
         if self.domain_mode == 'log':
             final_tensor = tf.math.log(tf.math.abs(final_tensor)) / tf.math.log(tf.constant(10.0, dtype=tf.float32))
         elif self.domain_mode == 'dynamic':
@@ -1212,13 +1220,24 @@ class Engine:
         elif self.domain_mode == 'mod':
             final_tensor = tf.math.abs(final_tensor)
             final_tensor = final_tensor - tf.math.floor(final_tensor)
-        return tf.clip_by_value(final_tensor, clip_value_min=0, clip_value_max=1)
+        return tf.clip_by_value(final_tensor, clip_value_min=_codomain[0], clip_value_max=_codomain[1])
+
+
+    # Map from codomain range to final transform range
+    def get_final_transform(self, tensor):
+        return (tensor - _codomain[0]) * (_final_transform_delta / _codomain_delta) + _final_transform[0]
+
+
+    def domain_mapping(self, tensor):
+        final_tensor = tf.where(tf.math.is_nan(tensor), 0.0, tensor)
+        final_tensor = tf.clip_by_value(final_tensor, clip_value_min=tf.float32.min, clip_value_max=tf.float32.max)
+        final_tensor = self.codomain_range(final_tensor)
+        if self.do_final_transform:
+            final_tensor = self.get_final_transform(final_tensor)
+        return final_tensor
 
 
     def final_transform_domain(self, final_tensor):
-        final_tensor = tf.where(tf.math.is_nan(final_tensor), 0.0, final_tensor)
-        final_tensor = tf.clip_by_value(final_tensor, clip_value_min=tf.float32.min, clip_value_max=tf.float32.max)
-        final_tensor = self.domain_range(final_tensor)
         return final_tensor
 
 
@@ -1232,7 +1251,8 @@ class Engine:
             #print("Evaluating ind: ", p['tree'].get_str())
             #_start = time.time()
             test_tens = p['tree'].get_tensor(self)
-            tens = self.final_transform_domain(test_tens)
+            # tens = self.final_transform_domain(test_tens)
+            tens = self.domain_mapping(test_tens)
             #tens = test_tens
             p['tensor'] = tens
             tensors.append(tens)
@@ -1563,8 +1583,7 @@ class Engine:
             temp_population = []
             retrie_cnt = []
             for current_individual in range(self.population_size - self.elitism):
-
-
+                
                 rcnt = 0
                 if self.bloat_control == "off":
                     member_depth = float('inf')
@@ -1577,28 +1596,6 @@ class Engine:
                     indiv_temp, plist = self.selection()
                     member_depth, member_nodes = indiv_temp.get_depth()
                 temp_population.append(new_individual(indiv_temp, fitness=0, depth=member_depth, nodes=member_nodes, valid=False, parents=plist))
-
-                # # old method for selection 
-                # member_depth = float('inf')
-                # # generate new individual with acceptable depth
-                # rcnt = 0
-                # while member_depth > self.max_tree_depth:
-
-                #     parent = self.tournament_selection()
-                #     random_n = self.engine_rng.random()
-                #     if random_n < self.crossover_rate:
-                #         parent_2 = self.tournament_selection()
-                #         indiv_temp = self.crossover(parent['tree'], parent_2['tree'])
-                #     elif (random_n >= self.crossover_rate) and (random_n < self.crossover_rate + self.mutation_rate):
-                #         indiv_temp = self.mutation(parent['tree'])
-                #     else:
-                #         indiv_temp = parent['tree']
-
-                #     member_depth, member_nodes = indiv_temp.get_depth()
-                #     rcnt+=1
-                # retrie_cnt.append(rcnt)
-                # temp_population.append(new_individual(indiv_temp, fitness=0, depth=member_depth, nodes=member_nodes, valid=False, parents=[]))
-
                 if self.debug > 10: print("Individual " + str(indiv_temp) + ": " + indiv_temp.get_str())
 
             # Print average retrie count
