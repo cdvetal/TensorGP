@@ -1567,6 +1567,9 @@ class Engine:
 
                 self.current_generation += 1
 
+        # Save engine state to file
+        self.save_engine_state()
+
 
         while self.condition():
 
@@ -1686,6 +1689,7 @@ class Engine:
             # save engine state
             #if self.save_to_file != 0 and (self.current_generation % self.save_to_file) == 0:
             #self.save_state_to_file(self.experiment.logging_directory)
+            self.save_engine_state()
 
             # add population data to statistics and display gen statistics
             pops = self.population_stats(self.population)
@@ -1708,6 +1712,9 @@ class Engine:
 
         # write statistics(data) to csv
         self.write_overall_to_csv(self.data)
+
+        # Write final enggine state to file
+        self.save_engine_state()
 
         # print final stats
         if self.debug < 0:
