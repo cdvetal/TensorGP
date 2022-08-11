@@ -1042,7 +1042,7 @@ class Engine:
             _, tree = str_to_tree(target, self.terminal.set, constrain_domain=False)
 
             with tf.device(self.device):
-                self.target = tf.cast(self.get_final_transform(tree.get_tensor(self)), tf.float32) # cast to an int tensor
+                self.target = tf.cast(get_final_transform(tree.get_tensor(self)), tf.float32) # cast to an int tensor
                 # self.target = tf.cast(tree.get_tensor(self) * 127.5, tf.float32) # cast to an int tensor
         else:
             self.target = target
