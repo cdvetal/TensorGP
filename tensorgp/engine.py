@@ -62,6 +62,7 @@ _codomain = [-1.0, 1.0]
 _codomain_delta = _codomain[1] - _codomain[0]
 _final_transform = [0.0, 255.0]
 _final_transform_delta = _final_transform[1] - _final_transform[0]
+_do_final_transform = False
 
 
 # np debug options
@@ -350,7 +351,16 @@ def constrain(a, n, b):
     return min(max(n, a), b)
 
 
+# Map from codomain range to a specified final transform range
+def get_final_transform(tensor, ft_delta, ft_min):
+    return (tensor - _codomain[0]) * (ft_delta / _codomain_delta) + ft_min
+
+
 def get_np_array(tensor):
+    #check if tensor is in image range (0..255)
+    if ((not _do_final_transform) and _codomain[0] == 0.0 and _codomain[1] == 255.0) or (
+        _do_final_transform and _final_transform[0] == 0.0 and _final_transform[1] == 255.0):
+        tensor = get_final_transform(tensor, 255.0, 0.0)
     return np.array(tensor, dtype='uint8')
 
 
@@ -996,7 +1006,7 @@ class Engine:
 
         # technically globals are not needed but it helps with external operators
         global _domain_delta, _min_domain, _max_domain
-        global _codomain_delta, _codomain, _final_transform, _final_transform_delta
+        global _codomain_delta, _codomain, _final_transform, _final_transform_delta, _do_final_transform
         if min_domain is not None:
             _min_domain = min_domain
         if max_domain is not None:
@@ -1007,6 +1017,7 @@ class Engine:
         _codomain_delta = _codomain[1] - _codomain[0]
         
         self.do_final_transform = do_final_transform
+        _do_final_transform = self.do_final_transform
         if self.do_final_transform:
             if (final_transform is not None) and isinstance(final_transform, list):
                 _final_transform = [float(final_transform[0]), float(final_transform[1])]
@@ -1042,7 +1053,7 @@ class Engine:
             _, tree = str_to_tree(target, self.terminal.set, constrain_domain=False)
 
             with tf.device(self.device):
-                self.target = tf.cast(get_final_transform(tree.get_tensor(self)), tf.float32) # cast to an int tensor
+                self.target = tf.cast(get_final_transform(tree.get_tensor(self), _final_transform_delta, _final_transform[0]), tf.float32) # cast to an int tensor
                 # self.target = tf.cast(tree.get_tensor(self) * 127.5, tf.float32) # cast to an int tensor
         else:
             self.target = target
@@ -1221,17 +1232,12 @@ class Engine:
         return tf.clip_by_value(final_tensor, clip_value_min=_codomain[0], clip_value_max=_codomain[1])
 
 
-    # Map from codomain range to final transform range
-    def get_final_transform(self, tensor):
-        return (tensor - _codomain[0]) * (_final_transform_delta / _codomain_delta) + _final_transform[0]
-
-
     def domain_mapping(self, tensor):
         final_tensor = tf.where(tf.math.is_nan(tensor), 0.0, tensor)
         final_tensor = tf.clip_by_value(final_tensor, clip_value_min=tf.float32.min, clip_value_max=tf.float32.max)
         final_tensor = self.codomain_range(final_tensor)
         if self.do_final_transform:
-            final_tensor = self.get_final_transform(final_tensor)
+            final_tensor = get_final_transform(final_tensor, _final_transform_delta, _final_transform[0])
         return final_tensor
 
 
