@@ -1899,7 +1899,7 @@ class Engine:
         if self.save_bests:
             with open(self.experiment.bests_fp, "a") as csv_file:
                 try:
-                    if self.current_generation == 0: csv_file.write("generation, index, expression")
+                    if self.current_generation == 0: csv_file.write("generation, index, expression\n")
                     writer = csv.writer(csv_file)
                     writer.writerow([self.current_generation, self.best['fitness'], self.best['tree'].get_str()])
                 except IOError as error:
@@ -1908,7 +1908,7 @@ class Engine:
         if self.save_bests_overall:
             with open(self.experiment.bests_overall_fp, "a") as csv_file:
                 try:
-                    if self.current_generation == 0: csv_file.write("generation, index, expression")
+                    if self.current_generation == 0: csv_file.write("generation, index, expression\n")
                     writer = csv.writer(csv_file)
                     writer.writerow([self.current_generation, self.best_overall['fitness'], self.best_overall['tree'].get_str()])
                 except IOError as error:
