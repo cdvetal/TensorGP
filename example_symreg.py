@@ -90,8 +90,7 @@ if __name__ == "__main__":
                                 stop_criteria='generation',
                                 stop_value=gens,
                                 effective_dims=2,
-                                min_domain=-5,
-                                max_domain=5,
+                                domain = [-5, 5]
                                 codomain = [0, 2], # pagie codomain for the specified [-5, 5 ] range
                                 do_final_transform = True,
                                 final_transform = [0, 255],
