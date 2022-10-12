@@ -916,6 +916,7 @@ class Engine:
                  save_bests=True,
                  save_bests_overall=True,
 
+                 exp_prefix = '',
                  device='/cpu:0',
                  do_bgr=False,
                  write_log=True,
@@ -1002,7 +1003,7 @@ class Engine:
         self.effective_dims = self.dimensionality if effective_dims is None else effective_dims
         self.device = set_device(device=device) if initial_test_device else device  # Check for available devices
         self.file_state = file_state
-        self.experiment = Experiment(seed=seed, wd=self.run_dir_path)
+        self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix))
         self.engine_rng = random.Random(self.experiment.seed)
         tf.random.set_seed(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
@@ -2211,3 +2212,4 @@ class Terminal_Set:
 # Split long lines
 # TODO:
 # error quando pop = 1 ?
+# error quando torunament > pop_size
