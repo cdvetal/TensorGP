@@ -110,6 +110,7 @@ if __name__ == "__main__":
                     device=dev,
                     stop_criteria='generation',
                     codomain = [0, 1],
+                    domain=[0, 1],
                     do_final_transform = True,
                     final_transform = [0, 255],
                     stop_value=number_generations,
