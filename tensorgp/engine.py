@@ -887,9 +887,13 @@ class Engine:
                  codomain=None,
                  final_transform=None,
                  do_final_transform=False,
-                 bloat_control='std',
+
+                 bloat_control='off',
                  bloat_mode='depth',
                  dynamic_limit=8,
+                 min_overall_size=None,
+                 max_overall_size=None,
+
                  domain_mode='clip',
                  replace_mode='dynamic_arities',
                  replace_prob=0.05,
@@ -957,9 +961,11 @@ class Engine:
         self.save_graphics = save_graphics
         self.show_graphics = show_graphics
         self.do_bgr = do_bgr
+
         if bloat_control not in ['full_dynamic_dep', 'dynamic_dep']:  # add full_dynamic_size, dynamic_size
             bloat_control = 'off'
         self.bloat_control = bloat_control
+
         self.bloat_mode = 'size' if bloat_mode == 'size' else 'depth'
         if domain_mode not in ['log', 'dynamic', 'mod']:  # add full_dynamic_size, dynamic_size
             domain_mode = 'clip'
@@ -991,8 +997,12 @@ class Engine:
         self.max_subtree_dep = self.max_tree_depth if (max_subtree_dep is None) else max_subtree_dep
         self.min_subtree_dep = self.min_tree_depth if (min_subtree_dep is None) else min_subtree_dep
         if self.max_subtree_dep < self.min_subtree_dep: self.max_subtree_dep, self.min_subtree_dep = self.min_subtree_dep, self.max_subtree_dep
+
         self.dynamic_limit = max(dynamic_limit, self.max_subtree_dep)
         self.initial_dynamic_limit = self.dynamic_limit
+        self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size, 100)
+        self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size, 100)
+        if self.min_overall_size > self.max_overall_size: self.min_overall_size, self.max_overall_size = self.max_overall_size, self.min_overall_size
 
         self.stats_file_path = stats_file_path
         self.graphics_file_path = graphics_file_path
@@ -1676,30 +1686,32 @@ class Engine:
                 best_fit = self.best_overall['fitness']
                 for current_individual in range(self.population_size - self.elitism):
                     ind = temp_population[current_individual]
-                    my_limit = get_largest_parent(depth_mode, ind) if has_illegal_parents(ind) else self.dynamic_limit
+                    my_limit = get_largest_parent(ind, depth=depth_mode) if has_illegal_parents(ind) else self.dynamic_limit
 
                     sizeind = ind['depth'] if depth_mode else ind['nodes']
-                    fitnessind = ind['fitness']
 
-                    if sizeind <= my_limit:
-                        ind['valid'] = True
-                        accepted += 1
-                        if ((self.objective == 'minimizing') and (fitnessind < best_fit)) or (
+                    if self.min_overall_size <= sizeind <= self.max_overall_size: #verify overall min and max sizes
+                        fitnessind = ind['fitness']
+
+                        if sizeind <= my_limit:
+                            ind['valid'] = True
+                            accepted += 1
+                            if ((self.objective == 'minimizing') and (fitnessind < best_fit)) or (
+                                    (self.objective != 'minimizing') and (fitnessind > best_fit)):
+                                best_fit = fitnessind
+
+                            if (self.bloat_control == 'full_dynamic_dep') or (
+                                    (self.bloat_control == 'dynamic_dep') and (sizeind >= self.initial_dynamic_limit)):
+                                self.dynamic_limit = sizeind
+
+                        if sizeind > self.dynamic_limit and (
+                                (self.objective == 'minimizing') and (fitnessind < best_fit)) or (
                                 (self.objective != 'minimizing') and (fitnessind > best_fit)):
+                            ind['valid'] = True
+                            accepted += 1
+
                             best_fit = fitnessind
-
-                        if (self.bloat_control == 'full_dynamic_dep') or (
-                                (self.bloat_control == 'dynamic_dep') and (sizeind >= self.initial_dynamic_limit)):
                             self.dynamic_limit = sizeind
-
-                    if sizeind > self.dynamic_limit and (
-                            (self.objective == 'minimizing') and (fitnessind < best_fit)) or (
-                            (self.objective != 'minimizing') and (fitnessind > best_fit)):
-                        ind['valid'] = True
-                        accepted += 1
-
-                        best_fit = fitnessind
-                        self.dynamic_limit = sizeind
 
                 # build new_pop
                 illegals = 0
@@ -2213,3 +2225,4 @@ class Terminal_Set:
 # TODO:
 # error quando pop = 1 ?
 # error quando torunament > pop_size
+# add warning "no such primitive to str to tree"
