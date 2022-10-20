@@ -129,6 +129,32 @@ Additionally, you can also automatically generate graphics representing fitness 
 
 Again, refer to the Parameterization section for a full list of parameters.
 
+### Bloat control
+
+TensorGP implements mechanisms for bloat control. These are off by default: ```bloat_control = 'off'```. However there are three more modes:
+
+- **off**        -  ```min_tree_depth``` < depth < ```max_tree_depth```
+- **weak**       - ```dynamic_limit``` can only increase (until ```max_overall_size```)
+- **heavy**      - ```dynamic_limit``` can increase (until ```max_overall_size```) and decrease (until initial ```dynamic_limit``` value)
+- **very heavy** - ```dynamic_limit``` can increase (until ```max_overall_size```) and decrease (until ```min_overall_size```)
+ 
+ These control mechanisms can function both on depth and size (number of nodes of the tree), according to 
+ the ```bloat_mode``` argument.
+ 
+- **depth** - ```dynamic_limit``` refers to tree depth
+- **size** - ```dynamic_limit``` refers to number of nodes in a tree
+
+Example:
+
+**heavy** bloat control with the ```dynamic_limit``` varying from 8 (the initial value of the limit) and 10.
+```python
+engine = Engine(...,
+				bloat_control='heavy',  
+				dynamic_limit=8,  
+				min_overall_size=2,  
+				max_overall_size=10, ...)
+```
+
 ### Custom Initial population
 
 TensorGP implements the traditional stochastic methods for generating the initial population, such as Ramped-half-and-half, grow, and full. However, you can also write your own initial population in a file and pass it to the engine:
@@ -173,6 +199,9 @@ Another important aspect to point out is that scalars/constants are not really p
 
  
 ### Custom operators
+
+!!**WARNING**: Deprecated method!!
+(althought backwards compatible, you should prefer the ```get_terminal_set``` function)
 
 You can define custom operators in TensorGP by defining a function as a composition of existing TensorFlow primitives:
 
