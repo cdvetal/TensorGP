@@ -1009,7 +1009,6 @@ class Engine:
 
         self.dynamic_limit = max(dynamic_limit, self.max_subtree_dep)
         self.initial_dynamic_limit = self.dynamic_limit
-        print(self.initial_dynamic_limit)
         max_overall_dynamic_limit = 100 if self.bloat_mode == 'depth' else 2147483647
         self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size, max_overall_dynamic_limit)
         self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size, max_overall_dynamic_limit)
