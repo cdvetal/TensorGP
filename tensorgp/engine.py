@@ -38,6 +38,7 @@ import matplotlib.ticker as mticker
 import pylab
 import time
 import random
+import json
 from heapq import nsmallest, nlargest
 from operator import itemgetter
 from PIL import Image
@@ -856,18 +857,6 @@ class Engine:
         self.replace_nodes(chosen_node)
         return new_individual
 
-    def get_terminals(self, node):
-        candidates = Counter()
-        if node.terminal:
-            candidates.update([node])
-        else:
-            for i in node.children:
-                if i is not None:
-                    candidates.update(self.get_terminals(i))
-        return candidates
-
-    ## ====================== Init class ====================== ##
-
     def __init__(self,
                  fitness_func=None,
                  population_size=100,
@@ -902,6 +891,7 @@ class Engine:
                  dynamic_limit=8,
                  min_overall_size=None,
                  max_overall_size=None,
+                 lock_dynamic_limit=False,
 
                  domain_mode='clip',
                  replace_mode='dynamic_arities',
@@ -920,7 +910,6 @@ class Engine:
                  minimal_print=False,
                  save_graphics=True,
                  show_graphics=True,
-
                  save_image_best=True,
                  save_image_pop=True,
                  save_to_file=10,
@@ -971,7 +960,7 @@ class Engine:
         self.show_graphics = show_graphics
         self.do_bgr = do_bgr
 
-        if bloat_control not in ['very heavy', 'heavy']:  # add full_dynamic_size, dynamic_size
+        if bloat_control not in ['very heavy', 'heavy', 'weak']:  # add full_dynamic_size, dynamic_size
             bloat_control = 'off'
         self.bloat_control = bloat_control
 
@@ -991,7 +980,7 @@ class Engine:
         self.uniform_scalar_prob = uniform_scalar_prob
         self.max_retries = max_retries if max_retries != 0 else 10
 
-        if self.bloat_control in ['very heavy', 'heavy']:
+        if self.bloat_control in ['very heavy', 'heavy', 'weak']:
             self.max_init_depth = 5 if (max_init_depth is None) else max_init_depth
             self.min_init_depth = 2 if (min_init_depth is None) else min_init_depth
             if self.max_init_depth < self.min_init_depth: self.max_init_depth, self.min_init_depth = self.min_init_depth, self.max_init_depth
@@ -1007,12 +996,17 @@ class Engine:
         self.min_subtree_dep = self.min_tree_depth if (min_subtree_dep is None) else min_subtree_dep
         if self.max_subtree_dep < self.min_subtree_dep: self.max_subtree_dep, self.min_subtree_dep = self.min_subtree_dep, self.max_subtree_dep
 
-        self.dynamic_limit = max(dynamic_limit, self.max_subtree_dep)
+        self.dynamic_limit = min(dynamic_limit, self.max_tree_depth)
         self.initial_dynamic_limit = self.dynamic_limit
         max_overall_dynamic_limit = 100 if self.bloat_mode == 'depth' else 2147483647
         self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size, max_overall_dynamic_limit)
         self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size, max_overall_dynamic_limit)
         if self.min_overall_size > self.max_overall_size: self.min_overall_size, self.max_overall_size = self.max_overall_size, self.min_overall_size
+        self.lock_dynamic_limit = lock_dynamic_limit
+
+        # bloat control debug:
+        #self.get_summary(bloat=True, trees=True)
+        #print(self.get_json())
 
         self.stats_file_path = stats_file_path
         self.graphics_file_path = graphics_file_path
@@ -1153,6 +1147,41 @@ class Engine:
         self.population = []
         self.best = {}
         self.best_overall = {}
+
+    ## ====================== End init class ====================== ##
+
+    def get_summary(self, bloat=False, trees=False):
+        print("\n=== Engine summary ===")
+
+        if bloat:
+            print("\n=== Bloat control Information ===")
+            print("Bloat control: ", self.bloat_control)
+            print("Bloat mode: ", self.bloat_mode)
+            print("Dynamic limit", self.dynamic_limit)
+            print("Initial dynamic limit", self.initial_dynamic_limit)
+            print("Overall lower limit: ", self.min_overall_size)
+            print("Overall upper limit: ", self.max_overall_size)
+
+        if trees:
+            print("\n=== Tree depth Information ===")
+            print("Min init: ", self.min_init_depth)
+            print("Max init: ", self.max_init_depth)
+            print("Min overall: ", self.min_tree_depth)
+            print("Max overall: ", self.max_tree_depth)
+
+    def get_json(self):
+        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+
+
+    def get_terminals(self, node):
+        candidates = Counter()
+        if node.terminal:
+            candidates.update([node])
+        else:
+            for i in node.children:
+                if i is not None:
+                    candidates.update(self.get_terminals(i))
+        return candidates
 
     def get_terminal_set(self):
         return self.terminal
@@ -1685,7 +1714,21 @@ class Engine:
 
             # calculate fitness of the new population
             temp_population, self.best = self.fitness_func_wrap(population=temp_population,
+
                                                                 f_path=self.experiment.current_directory)
+            # bloat control:
+            #
+            # off        - min_tree_depth < depth < max_tree_depth
+            # weak       - dynamic_limit can only increase (until max_overall_size)
+            # heavy      - dynamic_limit can increase (until max_overall_size) and decrease (until initial dynamic_limit value)
+            # very heavy - dynamic_limit can increase (until max_overall_size) and decrease (until min_overall_size)
+            #
+            # bloat control modes:
+            #
+            # depth - dynamic_limit refers to tree depth
+            # size  - dynamic_limit refers to number of nodes in a tree
+            #
+            # https://www.researchgate.net/publication/220286086_Dynamic_limits_for_bloat_control_in_genetic_programming_and_a_review_of_past_and_current_bloat_theories
 
 
             if self.bloat_control == "off":
@@ -1694,21 +1737,19 @@ class Engine:
                 #    new_population.append(ind)
                 new_population += temp_population
             else:
-
-                # https://www.researchgate.net/publication/220286086_Dynamic_limits_for_bloat_control_in_genetic_programming_and_a_review_of_past_and_current_bloat_theories
                 accepted = 0
                 depth_mode = self.bloat_mode == 'depth'
                 best_fit = self.best_overall['fitness']
+                temp_limit = self.dynamic_limit
+
                 for current_individual in range(self.population_size - self.elitism):
                     ind = temp_population[current_individual]
                     my_limit = get_largest_parent(ind, depth=depth_mode) if has_illegal_parents(ind) else self.dynamic_limit
 
                     sizeind = ind['depth'] if depth_mode else ind['nodes']
 
-                    if self.min_overall_size <= sizeind <= self.max_overall_size: #verify overall min and max sizes
+                    if self.min_overall_size <= sizeind <= self.max_overall_size: # verify overall min and max sizes
                         fitnessind = ind['fitness']
-
-
 
                         if sizeind <= my_limit:
                             ind['valid'] = True
@@ -1719,7 +1760,11 @@ class Engine:
 
                             if (self.bloat_control == 'very heavy') or (
                                     (self.bloat_control == 'heavy') and (sizeind >= self.initial_dynamic_limit)):
-                                self.dynamic_limit = sizeind
+
+                                if self.lock_dynamic_limit:
+                                    temp_limit = sizeind
+                                else:
+                                    self.dynamic_limit = sizeind
 
                         if sizeind > self.dynamic_limit and (
                                 (self.objective == 'minimizing') and (fitnessind < best_fit)) or (
@@ -1728,7 +1773,18 @@ class Engine:
                             accepted += 1
 
                             best_fit = fitnessind
-                            self.dynamic_limit = sizeind
+
+                            if self.lock_dynamic_limit:
+                                temp_limit = sizeind
+                            else:
+                                self.dynamic_limit = sizeind
+
+                    #print("my limit: ", my_limit, "ind dep", ind['depth'], "is legal", ind['valid'])
+                    #print("dynamic limit: ", self.dynamic_limit)
+
+                if self.lock_dynamic_limit: self.dynamic_limit = temp_limit
+
+                #print("dynamic limit: ", self.dynamic_limit)
 
                 # build new_pop
                 illegals = 0
@@ -1872,16 +1928,16 @@ class Engine:
                 if line_start <= lcnt < line_end:
                     avg_fit.append(float(row[1]))
                     std_fit.append(float(row[2]))
-                    best_fit.append(float(row[4]))
+                    best_fit.append(float(row[4])) # overall
                     avg_dep.append(float(row[5]))
                     std_dep.append(float(row[6]))
-                    best_dep.append(float(row[8]))
+                    best_dep.append(float(row[8])) # overall
                 lcnt += 1
 
         # showing best overall
         fig, ax = plt.subplots(1, 1)
         ax.plot(range(self.stop_value + 1), avg_fit, linestyle='-', label="AVG")
-        ax.plot(range(self.stop_value + 1), best_fit, linestyle='-', label="BEST")
+        ax.plot(range(self.stop_value + 1), best_fit, linestyle='-', label="BEST (overall)")
         pylab.legend(loc='upper left')
         ax.set_xlabel('Generations')
         ax.set_ylabel('Fitness')
@@ -1895,7 +1951,7 @@ class Engine:
 
         fig, ax = plt.subplots(1, 1)
         ax.plot(range(self.stop_value + 1), avg_dep, linestyle='-', label="AVG")
-        ax.plot(range(self.stop_value + 1), best_dep, linestyle='-', label="BEST")
+        ax.plot(range(self.stop_value + 1), best_dep, linestyle='-', label="BEST (overall)")
         pylab.legend(loc='upper left')
         ax.set_xlabel('Generations')
         ax.set_ylabel('Depth')
