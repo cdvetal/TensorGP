@@ -683,11 +683,13 @@ class Engine:
     def mutation(self, parent):
         random_n = self.engine_rng.random()
         for k in range(len(self.mutation_funcs) - 1, -1, -1):
+
             if random_n > self.mutation_probs[k]:
                 if callable(getattr(self, self.mutation_funcs[k].__name__, None)):
                     return self.mutation_funcs[k](self, parent)
                 else:
                     return self.mutation_funcs[k](parent)
+
 
     def random_terminal(self):
         _, node = self.generate_program(method='full', max_nodes=0, max_depth=0)
@@ -700,13 +702,20 @@ class Engine:
         new_individual = copy.deepcopy(parent)
 
         # every node except last depth (terminals)
-        candidates = self.list_nodes(new_individual, True, True, False, False)
+        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=False)
+        if not new_individual.terminal: candidates.append(new_individual)
+
+
 
         if len(candidates) > 0:
-            chosen_node, _ = self.engine_rng.choice(candidates)  # parent = root
+
+            #chosen_node, _ = self.engine_rng.choice(candidates)  # parent = root
+            chosen_node = new_individual
 
             # random child of chosen
             chosen_child = chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)]
+            #new_individual = self.copy_node(chosen_child)
+
             chosen_node.value = chosen_child.value
             chosen_node.children = chosen_child.children
             chosen_node.terminal = chosen_child.terminal
@@ -842,7 +851,7 @@ class Engine:
 
     def point_mutation(self, parent):
         new_individual = copy.deepcopy(parent)
-        candidates = self.list_nodes(new_individual, True, True, True, True)
+        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=True, add_root=True)
         chosen_node, _ = self.engine_rng.choice(candidates)
         self.replace_nodes(chosen_node)
         return new_individual
@@ -962,7 +971,7 @@ class Engine:
         self.show_graphics = show_graphics
         self.do_bgr = do_bgr
 
-        if bloat_control not in ['full_dynamic_dep', 'dynamic_dep']:  # add full_dynamic_size, dynamic_size
+        if bloat_control not in ['very heavy', 'heavy']:  # add full_dynamic_size, dynamic_size
             bloat_control = 'off'
         self.bloat_control = bloat_control
 
@@ -982,7 +991,7 @@ class Engine:
         self.uniform_scalar_prob = uniform_scalar_prob
         self.max_retries = max_retries if max_retries != 0 else 10
 
-        if self.bloat_control in ['full_dynamic_dep', 'dynamic_dep']:
+        if self.bloat_control in ['very heavy', 'heavy']:
             self.max_init_depth = 5 if (max_init_depth is None) else max_init_depth
             self.min_init_depth = 2 if (min_init_depth is None) else min_init_depth
             if self.max_init_depth < self.min_init_depth: self.max_init_depth, self.min_init_depth = self.min_init_depth, self.max_init_depth
@@ -1000,8 +1009,10 @@ class Engine:
 
         self.dynamic_limit = max(dynamic_limit, self.max_subtree_dep)
         self.initial_dynamic_limit = self.dynamic_limit
-        self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size, 100)
-        self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size, 100)
+        print(self.initial_dynamic_limit)
+        max_overall_dynamic_limit = 100 if self.bloat_mode == 'depth' else 2147483647
+        self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size, max_overall_dynamic_limit)
+        self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size, max_overall_dynamic_limit)
         if self.min_overall_size > self.max_overall_size: self.min_overall_size, self.max_overall_size = self.max_overall_size, self.min_overall_size
 
         self.stats_file_path = stats_file_path
@@ -1673,13 +1684,14 @@ class Engine:
             temp_population, self.best = self.fitness_func_wrap(population=temp_population,
                                                                 f_path=self.experiment.current_directory)
 
+
             if self.bloat_control == "off":
                 # for current_individual in range(self.population_size - self.elitism):
                 #    ind = temp_population[current_individual]
                 #    new_population.append(ind)
                 new_population += temp_population
             else:
-                # bloat control - ['full_dynamic_dep' == very_heavy, 'dynamic_dep' heavy]
+
                 # https://www.researchgate.net/publication/220286086_Dynamic_limits_for_bloat_control_in_genetic_programming_and_a_review_of_past_and_current_bloat_theories
                 accepted = 0
                 depth_mode = self.bloat_mode == 'depth'
@@ -1693,6 +1705,8 @@ class Engine:
                     if self.min_overall_size <= sizeind <= self.max_overall_size: #verify overall min and max sizes
                         fitnessind = ind['fitness']
 
+
+
                         if sizeind <= my_limit:
                             ind['valid'] = True
                             accepted += 1
@@ -1700,8 +1714,8 @@ class Engine:
                                     (self.objective != 'minimizing') and (fitnessind > best_fit)):
                                 best_fit = fitnessind
 
-                            if (self.bloat_control == 'full_dynamic_dep') or (
-                                    (self.bloat_control == 'dynamic_dep') and (sizeind >= self.initial_dynamic_limit)):
+                            if (self.bloat_control == 'very heavy') or (
+                                    (self.bloat_control == 'heavy') and (sizeind >= self.initial_dynamic_limit)):
                                 self.dynamic_limit = sizeind
 
                         if sizeind > self.dynamic_limit and (
@@ -1819,10 +1833,14 @@ class Engine:
             # print("cross")
         if random_n2 < self.mutation_rate:
             indiv_temp = self.mutation(parent['tree'])
+
+        #if indiv_temp
             # print("mut")
-        if random_n1 >= self.crossover_rate and random_n1 >= self.crossover_rate:
-            indiv_temp = parent['tree']
+        #if random_n1 >= self.crossover_rate and random_n2 >= self.crossover_rate:
+            #indiv_temp = parent['tree']
             # print("repro")
+        #print("Indiv temp dep: ", indiv_temp.get_depth(), " with str: ", indiv_temp.get_str())
+
         return indiv_temp, plist
 
     def graph_statistics(self, extension="pdf"):
