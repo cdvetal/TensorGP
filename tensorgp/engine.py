@@ -1660,13 +1660,17 @@ class Engine:
                 rcnt = 0
                 if self.bloat_control == "off":
                     member_depth = float('inf')
+
                     while member_depth > self.max_tree_depth and rcnt < self.max_retries:
-                        indiv_temp, plist = self.selection()
+                        indiv_temp, parent, plist = self.selection()
                         member_depth, member_nodes = indiv_temp.get_depth()
                         rcnt += 1
+                    if member_depth > self.max_tree_depth:
+                        indiv_temp = parent
+
                     retrie_cnt.append(rcnt)
                 else:
-                    indiv_temp, plist = self.selection()
+                    indiv_temp, _, plist = self.selection()
                     member_depth, member_nodes = indiv_temp.get_depth()
                 temp_population.append(
                     new_individual(indiv_temp, fitness=0, depth=member_depth, nodes=member_nodes, valid=False,
@@ -1840,7 +1844,7 @@ class Engine:
             # print("repro")
         #print("Indiv temp dep: ", indiv_temp.get_depth(), " with str: ", indiv_temp.get_str())
 
-        return indiv_temp, plist
+        return indiv_temp, parent, plist
 
     def graph_statistics(self, extension="pdf"):
 
