@@ -318,10 +318,10 @@ class Node:
         if self.terminal:
             if self.value == 'scalar':
                 args = len(self.children)
-                if args == 1:
+                last_dim = engref.terminal.dimension
+                if args == 1 or last_dim <= 1:
                     return tf.constant(self.children[0], tf.float32, engref.target_dims)
                 else:
-                    last_dim = engref.terminal.dimension
                     extend_children = self.children + ([self.children[-1]] * (last_dim - args))
                     return tf.stack(
                         [tf.constant(float(c), tf.float32, engref.target_dims[:engref.effective_dims]) for c in
@@ -538,7 +538,7 @@ class Experiment:
         self.filename = self.set_experiment_filename(addon=addon)
 
         try:
-            self.working_directory = (os.getcwd() + sub_wd + self.filename + _tgp_delimiter) if wd is None else wd
+            self.working_directory = (os.getcwd() + sub_wd + addon + _tgp_delimiter + self.filename + _tgp_delimiter) if wd is None else wd
             os.makedirs(self.working_directory)
         except OSError as error:
             if error is FileExistsError:
@@ -612,6 +612,22 @@ def get_largest_parent(tree, depth=True):
 def new_individual(tree, fitness=0, depth=0, nodes=0, tensor=[], valid=True, parents=[], weights=[]):
     return {'tree': tree, 'fitness': fitness, 'depth': depth, 'nodes': nodes, 'tensor': tensor, 'valid': valid,
             'parents': parents, 'weights': weights}
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            print("What the here? ", obj.tolist())
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+def default_json(obj):
+    if isinstance(obj, list):
+        return [str(a) for a in obj]
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj.__dict__
+    #return json.JSONEncoder.default(self, obj)
 
 
 ## ====================== Engine ====================== ##
@@ -830,7 +846,7 @@ class Engine:
         else:
 
             this_arity = self.function.set[node.value][0]
-            arity_to_search = random.choice(
+            arity_to_search = self.engine_rng.choice(
                 list(self.function.arity.keys())) if self.replace_mode == 'dynamic_arities' else this_arity
 
             set_of_same_arities = self.function.arity[arity_to_search][:]
@@ -939,6 +955,7 @@ class Engine:
         self.elapsed_fitness_time = 0
         self.elapsed_tensor_time = 0
         self.elapsed_engine_time = 0
+
 
         # check for fitness func
         self.fitness_func = fitness_func
@@ -1148,6 +1165,9 @@ class Engine:
         self.best = {}
         self.best_overall = {}
 
+        #print(self.get_json())
+
+
     ## ====================== End init class ====================== ##
 
     def get_summary(self, bloat=False, trees=False):
@@ -1170,7 +1190,8 @@ class Engine:
             print("Max overall: ", self.max_tree_depth)
 
     def get_json(self):
-        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+        return json.dumps(self, default=default_json, cls=NumpyEncoder, sort_keys=True, indent=4)
+        #return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
 
     def get_terminals(self, node):
@@ -1325,7 +1346,7 @@ class Engine:
 
     def domain_mapping(self, tensor):
         #print("Initial:\n", tensor.numpy())
-        final_tensor = tf.where(tf.math.is_nan(tensor), 0.0, tensor)
+        final_tensor = tf.where(tf.math.is_nan(tensor), _domain[0], tensor)
         #print("T1:\n", final_tensor.numpy())
         final_tensor = tf.clip_by_value(final_tensor, clip_value_min=tf.float32.min, clip_value_max=tf.float32.max)
         #print("T2:\n", final_tensor.numpy())
@@ -1344,19 +1365,20 @@ class Engine:
         tensors = []
         # with tf.device(self.device):
         start = time.time()
-
         for p in population:
             # print("Evaluating ind: ", p['tree'].get_str())
             # _start = time.time()
+
+            if isinstance(p['tree'], dict):
+                print("Deb")
+                print(p['tree'])
+
             test_tens = p['tree'].get_tensor(self)
             # tens = self.final_transform_domain(test_tens)
             tens = self.domain_mapping(test_tens)
             # tens = test_tens
             p['tensor'] = tens
             tensors.append(tens)
-
-            # dur = time.time() - _start
-            # print("Took", dur, "s")
 
         time_tensor = time.time() - start
 
@@ -1695,7 +1717,9 @@ class Engine:
                         member_depth, member_nodes = indiv_temp.get_depth()
                         rcnt += 1
                     if member_depth > self.max_tree_depth:
-                        indiv_temp = parent
+                        indiv_temp = parent['tree']
+                        member_depth = parent['depth']
+                        member_nodes = parent['nodes']
 
                     retrie_cnt.append(rcnt)
                 else:
@@ -1714,7 +1738,6 @@ class Engine:
 
             # calculate fitness of the new population
             temp_population, self.best = self.fitness_func_wrap(population=temp_population,
-
                                                                 f_path=self.experiment.current_directory)
             # bloat control:
             #
