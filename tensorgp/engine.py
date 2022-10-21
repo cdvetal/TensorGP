@@ -1,9 +1,9 @@
 # MIT License
 
-# Copyright (c) 2020-2021 Francisco Baeta (University of Coimbra)
-# Copyright (c) 2020-2021 João Correia (University of Coimbra)
-# Copyright (c) 2020-2021 Tiago Martins (University of Coimbra)
-# Copyright (c) 2020-2021 Penousal Machado (University of Coimbra)
+# Copyright (c) 2020-2022 Francisco Baeta (University of Coimbra)
+# Copyright (c) 2020-2022 João Correia (University of Coimbra)
+# Copyright (c) 2020-2022 Tiago Martins (University of Coimbra)
+# Copyright (c) 2020-2022 Penousal Machado (University of Coimbra)
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -1164,7 +1164,6 @@ class Engine:
         self.population = []
         self.best = {}
         self.best_overall = {}
-
         #print(self.get_json())
 
 
@@ -1690,6 +1689,11 @@ class Engine:
 
         while self.condition():
 
+            #print("current gen", self.current_generation - 1)
+            #print("Best individual: ", self.best['tree'].get_str())
+            #print("Address at: ", self.best['tree'])
+            #print()
+
             # Update seed according to generation
             self.engine_rng = random.Random(self.experiment.seed)
 
@@ -1737,8 +1741,13 @@ class Engine:
                     self.current_generation) + ": " + str(rstd))
 
             # calculate fitness of the new population
-            temp_population, self.best = self.fitness_func_wrap(population=temp_population,
+            temp_population, temp_best = self.fitness_func_wrap(population=temp_population,
                                                                 f_path=self.experiment.current_directory)
+            if self.condition_local(temp_best['fitness']):
+                # we should not need to do deepcopy here
+                self.best = copy.deepcopy(temp_best)
+
+
             # bloat control:
             #
             # off        - min_tree_depth < depth < max_tree_depth
@@ -2152,7 +2161,7 @@ class Function_Set:
             'if': [3, resolve_if_node],
             'len': [2, resolve_len_node],
             'lerp': [3, resolve_lerp_node],
-            'lerpp': [3, resolve_lerp_node],
+            #'lerpp': [3, resolve_lerp_node],
             'log': [1, resolve_log_node],
             'max': [2, resolve_max_node],
             'mdist': [2, resolve_mdist_node],
@@ -2318,11 +2327,3 @@ class Terminal_Set:
         for s in self.set:
             res += s + "\n"
         return res
-
-
-# Revise comments
-# Split long lines
-# TODO:
-# error quando pop = 1 ?
-# error quando torunament > pop_size
-# add warning "no such primitive to str to tree"
