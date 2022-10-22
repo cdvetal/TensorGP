@@ -1210,7 +1210,7 @@ class Engine:
         return self.function
 
     def can_save_image(self):
-        return ((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition()
+        return self.save_image_pop and (((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
 
     def can_save_log(self):
         return ((self.current_generation % self.save_to_file_log) == 0) or not self.next_condition()
