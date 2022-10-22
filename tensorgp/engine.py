@@ -342,6 +342,17 @@ class Node:
 
             return self.node_tensor(tens_list, engref)
 
+    def fancy_print(self, acc='', dep=0):
+        acc += "." * 2 * dep
+        acc += str(self.value) + "\n"
+        if not self.terminal:
+            for c in self.children:
+                acc = c.fancy_print(acc, dep + 1)
+        elif self.value == 'scalar':
+            for c in self.children:
+                acc += "." * (2 * (dep + 1)) + str(c) + "\n"
+        return acc
+
     def get_str(self):
         if self.terminal and self.value != 'scalar':
             return str(self.value)
@@ -384,6 +395,9 @@ class Node:
 def constrain(a, n, b):
     return min(max(n, a), b)
 
+
+def get_func_name(func, default = "Not callable"):
+    return func.__name__ if callable(func) else default
 
 # Map from codomain range to a specified final transform range
 def get_final_transform(tensor, ft_delta, ft_min):
@@ -525,6 +539,27 @@ class Experiment:
     def set_experiment_ID(self):
         return int(time.time() * 1000.0) << 16
 
+    def summary(self):
+        summary_str = "Experiment ID: " + str(self.ID) + "\n"
+        summary_str += "Experiment filename: " + self.filename + "\n"
+        summary_str += "Experiment directories: \n"
+        summary_str += "Current dir: " + str(self.current_directory) + "\n"
+        summary_str += "Image dir: " + str(self.image_directory) + "\n"
+        summary_str += "Current image dir: " + str(self.cur_image_directory) + "\n"
+        summary_str += "Bests dir: " + str(self.bests_directory) + "\n"
+        summary_str += "All dir: " + str(self.all_directory) + "\n"
+        summary_str += "Immigration dir: " + str(self.immigration_directory) + "\n"
+        summary_str += "Logging dir: " + str(self.logging_directory) + "\n"
+        summary_str += "Generations dir: " + str(self.generations_directory) + "\n"
+        summary_str += "Graphics dir: " + str(self.graphs_directory) + "\n"
+        summary_str += "Experiment file pointers: \n"
+        summary_str += "Overall fp: " + str(self.overall_fp) + "\n"
+        summary_str += "Timings fp: " + str(self.timings_fp) + "\n"
+        summary_str += "Setup fp: " + str(self.setup_fp) + "\n"
+        summary_str += "Best (gen) fp: " + str(self.bests_fp) + "\n"
+        summary_str += "Best (overall) fp: " + str(self.bests_overall_fp) + "\n"
+        return summary_str
+
     def __init__(self,
                  sub_wd=_tgp_delimiter + _tgp_subdir + _tgp_delimiter,
                  immigration=None,
@@ -612,6 +647,22 @@ def get_largest_parent(tree, depth=True):
 def new_individual(tree, fitness=0, depth=0, nodes=0, tensor=[], valid=True, parents=[], weights=[]):
     return {'tree': tree, 'fitness': fitness, 'depth': depth, 'nodes': nodes, 'tensor': tensor, 'valid': valid,
             'parents': parents, 'weights': weights}
+
+def get_ind_str(ind, fancy_print=False, stats=False, limit_fancy_print=1000):
+    res = ind['tree'].fancy_print() if (fancy_print and ind['nodes'] < limit_fancy_print) else ind['tree'].get_str()
+    if stats:
+        res += "\n"
+        res += "Fitness: " + str(ind['fitness']) + "\n"
+        res += "Depth: " + str(ind['depth']) + "\n"
+        res += "Nodes: " + str(ind['nodes']) + "\n"
+        res += "Valid: " + str(ind['valid']) + "\n"
+    return res + "\n"
+
+def g_population(population, fancy_print=False, stats=False,limit_fancy_print=1000):
+    res = ''
+    for p in population:
+        res += get_ind_str(p, fancy_print=fancy_print, stats=stats, limit_fancy_print=limit_fancy_print)
+    return res
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -923,7 +974,6 @@ class Engine:
                  max_nodes=-1,
                  seed=None,
                  debug=0,
-                 minimal_print=False,
                  save_graphics=True,
                  show_graphics=True,
                  save_image_best=True,
@@ -931,14 +981,21 @@ class Engine:
                  save_to_file=10,
                  save_to_file_image=None,
                  save_to_file_log=None,
+                 save_to_file_state=None,
                  save_bests=True,
                  save_bests_overall=True,
 
                  exp_prefix = '',
                  device='/cpu:0',
                  do_bgr=False,
-                 write_log=True,
-                 write_gen_stats=True,
+                 image_format=None,
+                 graphics_format=None,
+                 minimal_print=False,
+
+                 save_log=True,
+
+                 write_engine_state=True,
+
                  initial_test_device=True,
                  file_state=None,
                  var_func=None,
@@ -959,10 +1016,16 @@ class Engine:
 
         # check for fitness func
         self.fitness_func = fitness_func
+        if debug > 0:
+            if self.fitness_func is None:
+                print(bcolors.WARNING + "[WARNING]:\tFitness function not defined!", bcolors.ENDC)
+            elif not callable(self.fitness_func):
+                print(bcolors.WARNING + "[WARNING]:\tFitness function is not callable!", bcolors.ENDC)
 
         # TODO: read configuration if present
 
         # optional vars
+        self.minimal_print = minimal_print
         self.recent_fitness_time = 0
         self.recent_tensor_time = 0
         self.recent_engine_time = 0
@@ -987,9 +1050,9 @@ class Engine:
         self.domain_mode = domain_mode
         self.immigration = immigration
         self.debug = debug
-        self.minial_print = minimal_print
         self.save_to_file_image = save_to_file if save_to_file_image is None else save_to_file_image
         self.save_to_file_log = save_to_file if save_to_file_log is None else save_to_file_log
+        self.save_to_file_state = save_to_file if save_to_file_state is None else save_to_file_state
         self.max_nodes = max_nodes
         self.objective = objective
         self.terminal_prob = terminal_prob
@@ -1032,23 +1095,27 @@ class Engine:
         self.target_dims = [128, 128] if (target_dims is None) else target_dims
         self.dimensionality = len(self.target_dims)
         self.effective_dims = self.dimensionality if effective_dims is None else effective_dims
-        self.device = set_device(device=device) if initial_test_device else device  # Check for available devices
+        self.initial_test_device = initial_test_device
+        self.device = set_device(device=device) if self.initial_test_device else device  # Check for available devices
         self.file_state = file_state
         self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix))
         self.engine_rng = random.Random(self.experiment.seed)
         tf.random.set_seed(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
+        self.image_format = '.' + (image_format if (image_format in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
+        self.graphic_format = '.' + (graphics_format if (graphics_format in ['pdf', 'png', 'jpg', 'jpeg']) else 'pdf')
         self.replace_prob = max(0.0, min(1.0, replace_prob))
         self.pop_file = read_init_pop_from_file
-        self.write_log = write_log
-        self.write_gen_stats = write_gen_stats
+        self.save_log = save_log
+        self.write_engine_state = write_engine_state
         self.save_image_best = save_image_best
         self.save_bests = save_bests
         self.save_bests_overall = save_bests_overall
         self.save_image_pop = save_image_pop
         self.save_state = 0
         self.last_stop = 0
+
 
         if mutation_funcs is None or mutation_funcs == []:
             mut_funcs_implemented = 4
@@ -1157,7 +1224,7 @@ class Engine:
 
         # update timers
         self.elapsed_init_time += time.time() - start_init
-        if self.debug > 0 and not self.minial_print: print("Elapsed init time: ", self.elapsed_init_time)
+        if self.debug > 0: print("Elapsed init time: ", self.elapsed_init_time)
         print(bcolors.OKGREEN + "Engine seed:" + str(self.experiment.seed), bcolors.ENDC)
         self.update_engine_time()
 
@@ -1169,24 +1236,181 @@ class Engine:
 
     ## ====================== End init class ====================== ##
 
-    def get_summary(self, bloat=False, trees=False):
-        print("\n=== Engine summary ===")
+    def summary(self, force_print = False, print_prints=False, ind_fancy_print=False, ind_stats=False,
+                    bloat=False, trees=False, timers=False, general=False, probs=False, domain=False, graphics=False,
+                    extra=False, images=False, logs=False, paths=False, experiment=False, terminals=False,
+                    functions=False, population=False):
 
-        if bloat:
-            print("\n=== Bloat control Information ===")
-            print("Bloat control: ", self.bloat_control)
-            print("Bloat mode: ", self.bloat_mode)
-            print("Dynamic limit", self.dynamic_limit)
-            print("Initial dynamic limit", self.initial_dynamic_limit)
-            print("Overall lower limit: ", self.min_overall_size)
-            print("Overall upper limit: ", self.max_overall_size)
+        summary_str = ""
+        if force_print: summary_str += "Engine summary\n"
+        if print_prints:
+            summary_str += "\n============= Begin summary information =============\n"
+            summary_str += "Force print: " + str(force_print) + "\n"
+            if not force_print:
+                summary_str += "Print bloat: " + str(bloat) + "\n"
+                summary_str += "Print trees: " + str(trees) + "\n"
+                summary_str += "Print timers: " + str(timers) + "\n"
+                summary_str += "Print general: " + str(general) + "\n"
+                summary_str += "Print probs: " + str(probs) + "\n"
+                summary_str += "Print domain: " + str(domain) + "\n"
+                summary_str += "Print saves: " + str(graphics) + "\n"
+                summary_str += "Print extra: " + str(extra) + "\n"
+                summary_str += "Print images: " + str(images) + "\n"
+                summary_str += "Print logs: " + str(logs) + "\n"
+                summary_str += "Print paths: " + str(paths) + "\n"
+                summary_str += "Print experiment: " + str(experiment) + "\n"
+                summary_str += "Print terminals: " + str(terminals) + "\n"
+                summary_str += "Print functions: " + str(functions) + "\n"
+            summary_str += "\n============== End summary information ==============\n"
 
-        if trees:
-            print("\n=== Tree depth Information ===")
-            print("Min init: ", self.min_init_depth)
-            print("Max init: ", self.max_init_depth)
-            print("Min overall: ", self.min_tree_depth)
-            print("Max overall: ", self.max_tree_depth)
+        if general or force_print:
+            summary_str += "\n============ General Information ============\n"
+            summary_str += "Fitness Function: " + get_func_name(self.fitness_func) + "\n"
+            summary_str += "Seed: " + get_func_name(self.experiment.seed) + "\n"
+            summary_str += "Current generation: " + str(self.current_generation) + "\n"
+            if not self.condition(): summary_str += "The run is over!\n"
+            summary_str += "Population size: " + str(self.population_size) + "\n"
+            summary_str += "Tournament size: " + str(self.tournament_size) + "\n"
+            summary_str += "Elite size: " + str(self.elitism) + "\n"
+            summary_str += "Mutation rate: " + str(self.mutation_rate) + "\n"
+            summary_str += "Crossover rate: " + str(self.crossover_rate) + "\n"
+            summary_str += "Tree generation: " + str(self.method) + "\n"
+            summary_str += "Stop criteria: " + self.stop_criteria + "\n"
+            summary_str += "Stop value: " + str(self.stop_value) + "\n"
+            summary_str += "Objective: " + str(self.objective) + "\n"
+            summary_str += "Resolution: " + str(self.target_dims) + "\n"
+            summary_str += "Device: " + str(self.device) + "\n"
+
+        if trees or force_print:
+            summary_str += "\n============ Tree Information ============\n"
+            summary_str += "Min init: " + str(self.min_init_depth) + "\n"
+            summary_str += "Max init: " + str(self.max_init_depth) + "\n"
+            summary_str += "Min overall: " + str(self.min_tree_depth) + "\n"
+            summary_str += "Max overall: " + str(self.max_tree_depth) + "\n"
+            summary_str += "Min subtree depth: " + str(self.min_subtree_dep) + "\n"
+            summary_str += "Max subtree depth: " + str(self.max_subtree_dep) + "\n"
+            summary_str += "Max nodes: " + str(self.max_nodes) + "\n"
+            summary_str += "ERC min value: " + str(self.erc_min) + "\n"
+            summary_str += "ERC max value: " + str(self.erc_max) + "\n"
+
+        if probs or force_print:
+            summary_str += "\n============ Probabilities Information ============\n"
+            summary_str += "Koza probability rule: " + str(self.koza_rule_prob) + "\n"
+            summary_str += "Terminal prob: " + str(self.terminal_prob) + "\n"
+            summary_str += "Scalar prob: " + str(self.scalar_prob) + "\n"
+            summary_str += "Uniform scalar prob: " + str(self.uniform_scalar_prob) + "\n"
+            summary_str += "Mutations functions: ["
+            lim = len(self.mutation_funcs)
+            for m in range(lim):
+                summary_str += get_func_name(self.mutation_funcs[m])
+                if m < lim - 1:
+                    summary_str += ", "
+            summary_str += "]\n"
+            summary_str += "Koza probability rule: " + str(self.koza_rule_prob) + "\n"
+            summary_str += "Replace prob (point mut): " + str(self.replace_prob) + "\n"
+
+        if domain or force_print:
+            summary_str += "\n============ Inputs/Outputs/Mapping Information ============\n"
+            summary_str += "Domain: " + str(_domain) + "\n"
+            summary_str += "Codomain: " + str(_codomain) + "\n"
+            summary_str += "Domain Mapping: " + str(self.domain_mode) + "\n"
+            summary_str += "Do final transform: " + str(self.do_final_transform) + "\n"
+            summary_str += "Final transform: " + str(_final_transform) + "\n"
+
+        if terminals or force_print:
+            summary_str += "\n============ Terminal set Information ============\n"
+            summary_str += self.terminal.summary()
+
+        if functions or force_print:
+            summary_str += "\n============ Function set Information ============\n"
+            summary_str += self.function.summary()
+
+        if bloat or force_print:
+            summary_str += "\n============ Bloat control Information ============\n"
+            summary_str += "Bloat control: " + self.bloat_control + "\n"
+            summary_str += "Bloat mode: " + self.bloat_mode + "\n"
+            summary_str += "Dynamic limit: " + str(self.dynamic_limit) + "\n"
+            summary_str += "Initial dynamic limit" + str(self.initial_dynamic_limit) + "\n"
+            summary_str += "Overall lower limit: " + str(self.min_overall_size) + "\n"
+            summary_str += "Overall upper limit: " + str(self.max_overall_size) + "\n"
+            summary_str += "Dynamic lymit locked: " + str(self.lock_dynamic_limit) + "\n"
+
+        if population or force_print:
+            summary_str += "\n============ Population Information ============\n"
+            summary_str += "Best individual: \n"
+            summary_str += ("Not defined" if ('tree' not in self.best) else get_ind_str(self.best, fancy_print=ind_fancy_print, stats=ind_stats)) + "\n"
+            summary_str += "Best overall individual: \n"
+            summary_str += ("Not defined" if ('tree' not in self.best_overall) else get_ind_str(self.best_overall, fancy_print=ind_fancy_print, stats=ind_stats)) + "\n"
+            summary_str += "Population: \n"
+            summary_str += g_population(self.population, fancy_print=ind_fancy_print,
+                                        stats=ind_stats, limit_fancy_print=int(max(1.0, 10000 * self.population_size)))
+
+        if graphics or force_print:
+            summary_str += "\n============ Saves Information ============\n"
+            summary_str += "Save graphics: " + str(self.save_graphics) + "\n"
+            summary_str += "Show graphics: " + str(self.show_graphics) + "\n"
+            summary_str += "Graphics save format: " + str(self.graphic_format) + "\n"
+
+        if images or force_print:
+            summary_str += "\n============ Images Information ============\n"
+            summary_str += "Save Population: " + str(self.save_image_pop) + "\n"
+            summary_str += "Save Bests: " + str(self.save_image_best) + "\n"
+            summary_str += "Save images n generations: " + str(self.save_to_file_image) + "\n"
+            summary_str += "Invert RGB: " + str(self.do_bgr) + "\n"
+            summary_str += "Image save format: " + str(self.image_format) + "\n"
+
+        if logs or force_print:
+            summary_str += "\n============ Logs Information ============\n"
+            summary_str += "Save Logs: " + str(self.save_log) + "\n"
+            summary_str += "Save logs n generations: " + str(self.save_to_file_log) + "\n"
+            summary_str += "Save state: " + str(self.write_engine_state) + "\n"
+            summary_str += "Save state n generations: " + str(self.save_to_file_state) + "\n"
+            summary_str += "Save Bests (gen): " + str(self.save_bests) + "\n"
+            summary_str += "Save Bests (overall): " + str(self.save_bests_overall) + "\n"
+
+        if timers or force_print:
+            summary_str += "\n============ Timers Information ============\n"
+            summary_str += "Elapsed initialization time: " + str(self.elapsed_init_time) + "\n"
+            summary_str += "Elapsed fitness time: " + str(self.elapsed_fitness_time) + "\n"
+            summary_str += "Elapsed tensor time: " + str(self.elapsed_tensor_time) + "\n"
+            summary_str += "Total engine time: " + str(self.elapsed_engine_time) + "\n"
+            summary_str += "Last engine update time: " + str(self.last_engine_time) + "\n"
+
+        if extra or force_print:
+            summary_str += "\n============ Extra Information ============\n"
+            summary_str += "Debug level: " + str(self.debug) + "\n"
+            summary_str += "Immigration: " + str(self.immigration) + "\n"
+            summary_str += "Max individual retries: " + str(self.max_retries) + "\n"
+            summary_str += "Dimensionality: " + str(self.dimensionality) + "\n"
+            summary_str += "Indexable dimensions: " + str(self.effective_dims) + "\n"
+            summary_str += "Initial device test: " + str(self.initial_test_device) + "\n"
+            summary_str += "Replace mode (point mut): " + str(self.replace_mode) + "\n"
+            summary_str += "Save state (first gen): " + str(self.save_state) + "\n"
+            summary_str += "Last saved population: " + str(self.last_stop) + "\n"
+            summary_str += "Function to generate terminal vars: " + get_func_name(self.var_func) + "\n"
+            summary_str += "Saved engine State: "
+            if self.file_state is not None:
+                summary_str += "\n"
+                for key, value in self.file_state.items():
+                    summary_str += str(key) + ' : ' + str(value) + "\n"
+            else:
+                summary_str += "None\n"
+            summary_str += "Taget tensor: " + str(self.target) + "\n"
+
+        if paths or force_print:
+            summary_str += "\n============ Paths Information ============\n"
+            summary_str += "Run directory: " + str(self.run_dir_path) + "\n"
+            summary_str += "Population file: " + str(self.pop_file_path) + "\n"
+            summary_str += "Stats file: " + str(self.stats_file_path) + "\n"
+            summary_str += "Graphics file: " + str(self.graphics_file_path) + "\n"
+            summary_str += "Initial pop file: " + str(self.pop_file) + "\n"
+
+        if experiment or force_print:
+            summary_str += "\n============ Experiment Information ============\n"
+            summary_str += self.experiment.summary()
+
+        return summary_str
+
 
     def get_json(self):
         return json.dumps(self, default=default_json, cls=NumpyEncoder, sort_keys=True, indent=4)
@@ -1216,7 +1440,10 @@ class Engine:
         return self.save_image_best and (((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
 
     def can_save_log(self):
-        return ((self.current_generation % self.save_to_file_log) == 0) or not self.next_condition()
+        return self.save_log and ((self.current_generation % self.save_to_file_log) == 0) or not self.next_condition()
+
+    def can_save_state(self):
+        return self.write_engine_state and ((self.current_generation % self.save_to_file_state) == 0) or not self.next_condition()
 
     def restart(self, new_stop=10):
         self.last_stop = self.stop_value
@@ -1407,6 +1634,7 @@ class Engine:
                                                  population=population,
                                                  tensors=tensors,
                                                  f_path=f_path,
+                                                 image_format=self.image_format,
                                                  rng=self.engine_rng,
                                                  objective=self.objective,
                                                  resolution=self.target_dims,
@@ -1419,15 +1647,15 @@ class Engine:
 
         if self.can_save_image_best():
             # Save Best Image
-                fn = self.experiment.bests_directory + "best_gen" + str(self.current_generation).zfill(5)
-                save_image(population[best_ind]['tensor'], best_ind, fn, self.target_dims, BGR=self.do_bgr)
+            fn = self.experiment.bests_directory + "best_gen" + str(self.current_generation).zfill(5)
+            save_image(population[best_ind]['tensor'], best_ind, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_format)
 
         if self.can_save_image_pop():
             # Save Population Images
             if self.save_image_pop:
                 for i in range(len(population)):
                     fn = self.experiment.cur_image_directory + "gen" + str(self.current_generation).zfill(5)
-                    save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr)
+                    save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_format)
 
         self.elapsed_fitness_time += fitness_time
         self.recent_fitness_time = fitness_time
@@ -1532,7 +1760,7 @@ class Engine:
         return population, best_pop
 
     def write_pop_to_csv(self, fp=None):
-        if self.write_gen_stats and self.can_save_log():
+        if self.can_save_log():
             genstr = "gen" + str(self.current_generation).zfill(5)
             fn = self.experiment.generations_directory if fp is None else fp
             fn += genstr + ".csv"
@@ -1582,7 +1810,7 @@ class Engine:
         index = 0
         for p in pop:
             t = p['tensor']
-            save_image(t, index, fp, self.target_dims, BGR=self.do_bgr)
+            save_image(t, index, fp, self.target_dims, BGR=self.do_bgr, extension=self.image_format)
             index += 1
 
     # and ((node_p1.value != 'scalar') or (node_p1.children == node_p2.children)):
@@ -1597,7 +1825,7 @@ class Engine:
 
     def run(self, stop_value=10, start_from_last_pop=True):
 
-        if not self.minial_print:
+        if not self.minimal_print:
             print(bcolors.OKGREEN + "\n\n" + "=" * 84, bcolors.ENDC)
 
         if self.save_state > 0:
@@ -1665,7 +1893,7 @@ class Engine:
                 self.write_pop_to_csv(self.pop_file_path)
                 self.save_bests_log()
                 if self.debug > 2:
-                    self.print_engine_state(force_print=True)
+                    self.summary(force_print=True)
 
                 # display gen statistics
                 pops = self.population_stats(self.population)
@@ -1878,7 +2106,7 @@ class Engine:
             self.save_bests_log()
 
             # print engine state
-            self.print_engine_state(force_print=False)
+            self.summary(force_print=False)
 
             # advance generation
             self.current_generation += 1
@@ -1891,9 +2119,9 @@ class Engine:
         self.save_engine_state()
 
         # print final stats
-        if self.debug < 0:
-            self.print_engine_state(force_print=True)
-        elif not self.minial_print:
+        if self.debug > 0:
+            self.summary(force_print=True)
+        elif not self.minimal_print:
             # TODO: make this an engine property for displaying to console (not to saved files)
             places_to_round = 3
             print(bcolors.OKGREEN + "\nElapsed Engine Time: \t" + str(
@@ -1904,8 +2132,8 @@ class Engine:
             print("\nBest individual (generation):\n" + bcolors.OKCYAN + self.best['tree'].get_str())
             print("\nBest individual (overall):\n" + bcolors.OKCYAN + self.best_overall['tree'].get_str(), bcolors.ENDC)
 
-        if self.save_graphics: self.graph_statistics()
-        if not self.minial_print: print(bcolors.BOLD + bcolors.OKGREEN + "=" * 84, "\n\n", bcolors.ENDC)
+        if self.save_graphics: self.graph_statistics(extension=self.graphic_format)
+        if not self.minimal_print: print(bcolors.BOLD + bcolors.OKGREEN + "=" * 84, "\n\n", bcolors.ENDC)
 
         self.save_state += 1
         tensors = [p['tensor'] for p in self.population]
@@ -1929,10 +2157,10 @@ class Engine:
             indiv_temp = self.mutation(parent['tree'])
 
         #if indiv_temp
-            # print("mut")
+        # print("mut")
         #if random_n1 >= self.crossover_rate and random_n2 >= self.crossover_rate:
-            #indiv_temp = parent['tree']
-            # print("repro")
+        #indiv_temp = parent['tree']
+        # print("repro")
         #print("Indiv temp dep: ", indiv_temp.get_depth(), " with str: ", indiv_temp.get_str())
 
         return indiv_temp, parent, plist
@@ -1980,7 +2208,7 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Fitness across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(fname=self.experiment.graphs_directory + 'Fitness.' + extension, format=extension)
+        plt.savefig(fname=self.experiment.graphs_directory + 'Fitness' + extension, format=extension)
         if self.show_graphics: plt.show()
         plt.close(fig)
 
@@ -1994,7 +2222,7 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Avg depth across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(fname=self.experiment.graphs_directory + "Depth." + extension, format=extension)
+        plt.savefig(fname=self.experiment.graphs_directory + "Depth" + extension, format=extension)
         if self.show_graphics: plt.show()
         plt.close(fig)
 
@@ -2025,48 +2253,11 @@ class Engine:
         self.recent_engine_time = t_ - self.last_engine_time
         self.last_engine_time = t_
 
-    def get_engine_state(self):  # TODO: revise this, there are new variables
-        engine_state_str = "Engine state information:\n"
-        engine_state_str += "Population Size: " + str(self.population_size) + "\n"
-        engine_state_str += "Tournament Size: " + str(self.tournament_size) + "\n"
-        engine_state_str += "Mutation Rate: " + str(self.mutation_rate) + "\n"
-        engine_state_str += "Crossover Rate: " + str(self.crossover_rate) + "\n"
-        engine_state_str += "Maximun Tree Depth: " + str(self.max_tree_depth) + "\n"
-        engine_state_str += "Minimun Tree Depth: " + str(self.min_tree_depth) + "\n"
-        engine_state_str += "Initial Tree Depth: " + str(self.max_init_depth) + "\n"
-        engine_state_str += "Population method: " + str(self.method) + "\n"
-        engine_state_str += "Terminal Probability: " + str(self.terminal_prob) + "\n"
-        engine_state_str += "Scalar Probability (from terminals): " + str(self.scalar_prob) + "\n"
-        engine_state_str += "Uniform Scalar (scalarT) Probability (from terminals): " + str(
-            self.uniform_scalar_prob) + "\n"
-        engine_state_str += "Stop Criteria: " + str(self.stop_criteria) + "\n"
-        engine_state_str += "Stop Value: " + str(self.stop_value) + "\n"
-        engine_state_str += "Objective: " + str(self.objective) + "\n"
-        engine_state_str += "Generations per immigration: " + str(self.immigration) + "\n"
-        engine_state_str += "Dimensions: " + str(self.target_dims) + "\n"
-        engine_state_str += "Max nodes: " + str(self.max_nodes) + "\n"
-        engine_state_str += "Debug Level: " + str(self.debug) + "\n"
-        engine_state_str += "Device: " + str(self.device) + "\n"
-        engine_state_str += "Save to log files: " + str(self.save_to_file_log) + "\n"
-        engine_state_str += "Save to image files: " + str(self.save_to_file_image) + "\n"
-        engine_state_str += "Generation: " + str(self.current_generation) + "\n"
-        engine_state_str += "Engine Seed : " + str(self.experiment.seed) + "\n"  # redundancy
-        engine_state_str += "Engine ID : " + str(self.experiment.ID) + "\n"  # to check while loading
-        engine_state_str += "Elapse Engine Time: " + str(self.elapsed_engine_time) + "\n"
-        engine_state_str += "Elapse Initiation Time: " + str(self.elapsed_init_time) + "\n"
-        engine_state_str += "Elapse Tensor Time: " + str(self.elapsed_tensor_time) + "\n"
-        engine_state_str += "Elapse Fitness Time: " + str(self.elapsed_fitness_time) + "\n"
-        return engine_state_str
-
-    # alias for engine state
-    def summary(self):
-        return self.get_engine_state()
-
     def save_engine_state(self):
-        if self.write_log:
+        if self.can_save_state():
             with open(self.experiment.setup_fp, "w") as text_file:
                 try:
-                    text_file.write(self.get_engine_state())
+                    text_file.write(self.summary(force_print=True))
                 except IOError as error:
                     print(bcolors.FAIL + "[ERROR]:\tI/O error while writing engine state ({0}): {1}".format(error.errno,
                                                                                                             error.strerror),
@@ -2107,7 +2298,7 @@ class Engine:
                 p = population[i]
                 print(str(p['tree'].get_str()))
 
-    def print_engine_state(self, force_print=False):
+    def print_engine_sta(self, force_print=False):
         if force_print and self.debug > 0:
             print("\n____________________Engine state____________________")
             if not self.condition(): print("The run is over!")
@@ -2239,13 +2430,20 @@ class Function_Set:
                             self.max_arity = max(self.max_arity, a)
 
     def __str__(self):
-        res = "\nFunction Set:\n"
+        res = "\nOperators:\n"
         for s in self.set:
             res += str(s) + ", " + str(self.set[s][0]) + "\n"
         res += "\nArity sorted:\n"
         for s in self.arity:
             res += str(s) + ", " + str(self.arity[s]) + "\n"
         return res
+
+    def summary(self):
+        summary_str = "Debug: " + str(self.debug) + "\n"
+        summary_str += "Min arity: " + str(self.min_arity) + "\n"
+        summary_str += "Max arity: " + str(self.max_arity) + "\n"
+        summary_str += self.__str__() + "\n"
+        return summary_str
 
 
 def clamp(x, n, y):
@@ -2326,7 +2524,17 @@ class Terminal_Set:
             del self.set[name]
 
     def __str__(self):
-        res = "\nTerminal Set:\n"
+        res = ''
         for s in self.set:
             res += s + "\n"
         return res
+
+    def summary(self):
+        summary_str = "Debug: " + str(self.debug) + "\n"
+        summary_str += "Engine reference: " + ("exists" if self.engref is not None else "None") + "\n"
+        summary_str += "Debug: " + str(self.dimension) + "\n"
+        summary_str += "Latent set: " + "\n"
+        for s in self.latentset:
+            summary_str += s + "\n"
+        summary_str += "Variables: \n" + self.__str__() + "\n"
+        return summary_str
