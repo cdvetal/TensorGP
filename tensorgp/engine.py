@@ -503,10 +503,10 @@ class Experiment:
         prefix = addon if addon is not None else ""
         return prefix + "__run__" + date + "__" + str(self.ID)
 
-    def set_generation_directory(self, generation, can_save_image):
+    def set_generation_directory(self, generation, can_save_image_pop):
         try:
             self.cur_image_directory = self.all_directory + "generation_" + str(generation).zfill(5) + _tgp_delimiter
-            if can_save_image():
+            if can_save_image_pop():
                 os.makedirs(self.cur_image_directory)
             # print("[DEBUG]:\tSet current directory to: " + self.current_directory)
         except OSError as error:
@@ -1209,8 +1209,11 @@ class Engine:
     def get_function_set(self):
         return self.function
 
-    def can_save_image(self):
+    def can_save_image_pop(self):
         return self.save_image_pop and (((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
+
+    def can_save_image_best(self):
+        return self.save_image_best and (((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
 
     def can_save_log(self):
         return ((self.current_generation % self.save_to_file_log) == 0) or not self.next_condition()
@@ -1414,12 +1417,12 @@ class Engine:
                                                  debug=False if (self.debug == 0) else True)
         fitness_time = time.time() - _s
 
-        if self.can_save_image():
+        if self.can_save_image_best():
             # Save Best Image
-            if self.save_image_best:
                 fn = self.experiment.bests_directory + "best_gen" + str(self.current_generation).zfill(5)
                 save_image(population[best_ind]['tensor'], best_ind, fn, self.target_dims, BGR=self.do_bgr)
 
+        if self.can_save_image_pop():
             # Save Population Images
             if self.save_image_pop:
                 for i in range(len(population)):
@@ -1459,11 +1462,11 @@ class Engine:
         # open population files
         strs = []
         with open(read_from_file) as fp:
-            line = fp.readline().replace("\n", "")
+            line = fp.readline().replace("\n", "").replace('"', "")
             cnt = 0
             while line and cnt < pop_size:
                 strs.append(line)
-                line = fp.readline().replace("\n", "")
+                line = fp.readline().replace("\n", "").replace('"', "")
                 cnt += 1
             if cnt < pop_size < float('inf'):
                 print(
@@ -1617,7 +1620,7 @@ class Engine:
             self.current_generation = self.file_state['generations']
             self.experiment.seed += self.current_generation
 
-            self.experiment.set_generation_directory(self.current_generation, self.can_save_image)
+            self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
             # time counters
             self.elapsed_init_time = self.file_state['elapsed_init_time']
@@ -1631,7 +1634,7 @@ class Engine:
 
         else:
             if start_from_last_pop < self.population_size or self.save_state == 0:
-                self.experiment.set_generation_directory(self.current_generation, self.can_save_image)
+                self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
                 population, best = self.initialize_population(self.max_init_depth,
                                                               self.min_init_depth,
@@ -1698,7 +1701,7 @@ class Engine:
             self.engine_rng = random.Random(self.experiment.seed)
 
             # Set directory to save engine state in this generation
-            self.experiment.set_generation_directory(self.current_generation, self.can_save_image)
+            self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
             # TODO: immigrate individuals (archive)
 
