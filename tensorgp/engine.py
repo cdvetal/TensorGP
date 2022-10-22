@@ -412,11 +412,11 @@ def get_np_array(tensor):
     return np.array(tensor, dtype='uint8')
 
 
-def save_image(tensor, index, fn, dims, sufix='', extension="png", BGR=False):  # expects [min_domain, max_domain]
+def save_image(tensor, index, fn, dims, sufix='', extension=".png", BGR=False):  # expects [min_domain, max_domain]
 
-    if extension not in ["png", "jpg", "jpeg"]:
-        extension = "png"
-    path = fn + "_ind" + str(index).zfill(5) + sufix + "." + extension
+    if extension.strip(".") not in ["png", "jpg", "jpeg"]:
+        extension = ".png"
+    path = fn + "_ind" + str(index).zfill(5) + sufix + extension
     aux = get_np_array(tensor)
 
     #print()
@@ -943,7 +943,7 @@ class Engine:
                  terminal_prob=0.2,
                  scalar_prob=0.55,
                  uniform_scalar_prob=0.5,
-                 max_retries=10,
+                 max_retries=5,
                  koza_rule_prob=0.9,
                  stop_criteria='generation',
                  stop_value=10,
@@ -988,8 +988,8 @@ class Engine:
                  exp_prefix = '',
                  device='/cpu:0',
                  do_bgr=False,
-                 image_format=None,
-                 graphics_format=None,
+                 image_extension=None,
+                 graphic_extension=None,
                  minimal_print=False,
 
                  save_log=True,
@@ -1103,8 +1103,8 @@ class Engine:
         tf.random.set_seed(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
-        self.image_format = '.' + (image_format if (image_format in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
-        self.graphic_format = '.' + (graphics_format if (graphics_format in ['pdf', 'png', 'jpg', 'jpeg']) else 'pdf')
+        self.image_extension = '.' + (image_extension if (image_extension in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
+        self.graphic_extension = '.' + (graphic_extension if (graphic_extension in ['pdf', 'png', 'jpg', 'jpeg']) else 'pdf')
         self.replace_prob = max(0.0, min(1.0, replace_prob))
         self.pop_file = read_init_pop_from_file
         self.save_log = save_log
@@ -1349,7 +1349,7 @@ class Engine:
             summary_str += "\n============ Saves Information ============\n"
             summary_str += "Save graphics: " + str(self.save_graphics) + "\n"
             summary_str += "Show graphics: " + str(self.show_graphics) + "\n"
-            summary_str += "Graphics save format: " + str(self.graphic_format) + "\n"
+            summary_str += "Graphics save extension: " + str(self.graphic_extension) + "\n"
 
         if images or force_print:
             summary_str += "\n============ Images Information ============\n"
@@ -1357,7 +1357,7 @@ class Engine:
             summary_str += "Save Bests: " + str(self.save_image_best) + "\n"
             summary_str += "Save images n generations: " + str(self.save_to_file_image) + "\n"
             summary_str += "Invert RGB: " + str(self.do_bgr) + "\n"
-            summary_str += "Image save format: " + str(self.image_format) + "\n"
+            summary_str += "Image save extension: " + str(self.image_extension) + "\n"
 
         if logs or force_print:
             summary_str += "\n============ Logs Information ============\n"
@@ -1634,7 +1634,7 @@ class Engine:
                                                  population=population,
                                                  tensors=tensors,
                                                  f_path=f_path,
-                                                 image_format=self.image_format,
+                                                 image_extension=self.image_extension,
                                                  rng=self.engine_rng,
                                                  objective=self.objective,
                                                  resolution=self.target_dims,
@@ -1648,14 +1648,14 @@ class Engine:
         if self.can_save_image_best():
             # Save Best Image
             fn = self.experiment.bests_directory + "best_gen" + str(self.current_generation).zfill(5)
-            save_image(population[best_ind]['tensor'], best_ind, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_format)
+            save_image(population[best_ind]['tensor'], best_ind, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
 
         if self.can_save_image_pop():
             # Save Population Images
             if self.save_image_pop:
                 for i in range(len(population)):
                     fn = self.experiment.cur_image_directory + "gen" + str(self.current_generation).zfill(5)
-                    save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_format)
+                    save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
 
         self.elapsed_fitness_time += fitness_time
         self.recent_fitness_time = fitness_time
@@ -1810,7 +1810,7 @@ class Engine:
         index = 0
         for p in pop:
             t = p['tensor']
-            save_image(t, index, fp, self.target_dims, BGR=self.do_bgr, extension=self.image_format)
+            save_image(t, index, fp, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
             index += 1
 
     # and ((node_p1.value != 'scalar') or (node_p1.children == node_p2.children)):
@@ -2118,6 +2118,13 @@ class Engine:
         # Write final enggine state to file
         self.save_engine_state()
 
+        # save best overall image to top level
+        if self.can_save_image_best():
+            # Save Best Image
+            fn = self.experiment.working_directory + str(self.current_generation).zfill(5)
+            save_image(self.best_overall['tensor'], 0, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
+
+
         # print final stats
         if self.debug > 0:
             self.summary(force_print=True)
@@ -2132,7 +2139,7 @@ class Engine:
             print("\nBest individual (generation):\n" + bcolors.OKCYAN + self.best['tree'].get_str())
             print("\nBest individual (overall):\n" + bcolors.OKCYAN + self.best_overall['tree'].get_str(), bcolors.ENDC)
 
-        if self.save_graphics: self.graph_statistics(extension=self.graphic_format)
+        if self.save_graphics: self.graph_statistics(extension=self.graphic_extension)
         if not self.minimal_print: print(bcolors.BOLD + bcolors.OKGREEN + "=" * 84, "\n\n", bcolors.ENDC)
 
         self.save_state += 1
@@ -2165,8 +2172,9 @@ class Engine:
 
         return indiv_temp, parent, plist
 
-    def graph_statistics(self, extension="pdf"):
+    def graph_statistics(self, extension=".pdf"):
 
+        extension.strip(".")
         if extension not in ["pdf", "svg"]:
             extension = "pdf"
         if not self.show_graphics:
@@ -2208,7 +2216,7 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Fitness across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(fname=self.experiment.graphs_directory + 'Fitness' + extension, format=extension)
+        plt.savefig(fname=self.experiment.graphs_directory + 'Fitness.' + extension, format=extension)
         if self.show_graphics: plt.show()
         plt.close(fig)
 
@@ -2222,7 +2230,7 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Avg depth across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(fname=self.experiment.graphs_directory + "Depth" + extension, format=extension)
+        plt.savefig(fname=self.experiment.graphs_directory + 'Depth.' + extension, format=extension)
         if self.show_graphics: plt.show()
         plt.close(fig)
 
