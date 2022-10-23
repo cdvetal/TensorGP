@@ -1,5 +1,6 @@
 from tensorgp.engine import *
 
+
 # Fitness function to calculate RMSE from target (Pagie Polynomial)
 def calc_fit(**kwargs):
     # read parameters
@@ -35,10 +36,10 @@ def calc_fit(**kwargs):
 
 
 # Different types of function sets
-extended_fset = {'max', 'min', 'abs', 'add', 'and', 'or', 'mult', 'sub', 'xor', 'neg', 'cos', 'sin', 'tan', 'sqrt', 'div', 'exp', 'log', 'warp'}
+extended_fset = {'max', 'min', 'abs', 'add', 'and', 'or', 'mult', 'sub', 'xor', 'neg', 'cos', 'sin', 'tan', 'sqrt',
+                 'div', 'exp', 'log', 'warp'}
 simple_set = {'add', 'sub', 'mult', 'div', 'sin', 'tan', 'cos'}
 normal_set = {'add', 'mult', 'sub', 'div', 'cos', 'sin', 'tan', 'abs', 'sign', 'pow'}
-
 
 if __name__ == "__main__":
 
@@ -51,13 +52,13 @@ if __name__ == "__main__":
     cross_rate = 0.9
     max_tree_dep = 10
     max_init_depth = 10
-    elite_size = 1 # 0 to turn off
-    runs = 1 # Number of average runs
+    elite_size = 1  # 0 to turn off
+    runs = 1  # Number of average runs
 
     # problems
     pagie = "add(div(scalar(1.0), add(scalar(1.0), div(scalar(1.0), mult(mult(x, x), mult(x, x))))), div(scalar(1.0), add(scalar(1.0), div(scalar(1.0), mult(mult(y, y), mult(y, y))))))"
     keijzer11 = "add(mult(x, var), sin(mult(sub(x, scalar(1.0)), sub(var, scalar(1.0)))))"
-    
+
     problems = [pagie]  # Add to run more problems
 
     # Domains dimensions
@@ -68,9 +69,8 @@ if __name__ == "__main__":
         for res in test_cases:
 
             for r in range(runs):
-
-                #seeds = random.randint(0, 0x7fffffff)
-                seeds = 39485793482 # reproducibility
+                # seeds = random.randint(0, 0x7fffffff)
+                seeds = 39485793482  # reproducibility
 
                 # create engine
                 engine = Engine(fitness_func=calc_fit,
@@ -90,22 +90,22 @@ if __name__ == "__main__":
                                 stop_criteria='generation',
                                 stop_value=gens,
                                 effective_dims=2,
-                                domain = [-5, 5]
-                                codomain = [0, 2], # pagie codomain for the specified [-5, 5 ] range
+                                domain=[-5, 5],
+                                codomain = [-5, 5],  # pagie codomain for the specified [-5, 5 ] range
                                 do_final_transform = True,
-                                final_transform = [0, 255],
-                                operators=normal_set,
-                                seed=seeds,
-                                save_to_file=10,
-                                save_to_file_image=20,
-                                save_to_file_log=10,
-                                save_graphics=True,
-                                show_graphics=False,
-                                save_image_best=True,
-                                save_image_pop=True,
-                                write_log=True,
-                                write_gen_stats=True,
-                                read_init_pop_from_file=None)
+                                final_transform = [0, 2],
+                                operators = normal_set,
+                                seed = seeds,
+                                save_to_file = 10,
+                                save_to_file_image = 20,
+                                save_to_file_log = 10,
+                                save_graphics = True,
+                                show_graphics = False,
+                                save_image_best = True,
+                                save_image_pop = True,
+                                save_log = True,
+                                write_engine_state = True,
+                                read_init_pop_from_file = None)
 
                 # run evolutionary process
                 engine.run()
