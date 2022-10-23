@@ -1,4 +1,4 @@
-from tensorgp.engine import *
+from tensorgp.engine_git import *
 
 # NIMA classifier imports
 from keras.models import Model
@@ -97,7 +97,6 @@ if __name__ == "__main__":
     # seed = 39485793482  # reproducibility
     seed = 2020
 
-    # create engine
     engine = Engine(fitness_func=nima_classifier,
                     population_size=pop_size,
                     tournament_size=tour_size,
@@ -109,8 +108,8 @@ if __name__ == "__main__":
                     objective='maximizing',
                     device=dev,
                     stop_criteria='generation',
-                    codomain = [0, 1],
-                    domain=[0, 1],
+                    codomain = [-1, 1],
+                    domain=[-1, 1],
                     do_final_transform = True,
                     final_transform = [0, 255],
                     stop_value=number_generations,
@@ -121,6 +120,7 @@ if __name__ == "__main__":
                     save_graphics=True,
                     show_graphics=False,
                     read_init_pop_from_file=None)
+    # create engine
 
     # This experiment is comparatively slower, but bear inmind that the NIMA classifier takes
     # a considerable amount of time
