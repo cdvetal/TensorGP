@@ -764,7 +764,7 @@ class Engine:
         return node
 
     def copy_node(self, n):
-        return Node(value=n.value, terminal=n.terminal, children=n.children)
+        return Node(value=n.value, terminal=n.terminal, children=[]+n.children)
 
     def delete_mutation(self, parent):
         new_individual = copy.deepcopy(parent)
@@ -847,11 +847,13 @@ class Engine:
         candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
 
         chosen_node, chosen_dep = self.engine_rng.choice(candidates)
-        _max_dep = self.max_tree_depth - chosen_dep
+        _max_dep = max((self.max_tree_depth - chosen_dep) - 1, 0)
         _max_dep = min(_max_dep, self.max_subtree_dep)
         _min_dep = min(_max_dep, self.min_subtree_dep)
 
         _, mutation_node = self.generate_program('grow', -1, max_depth=_max_dep, min_depth=_min_dep, root=True)
+        #print("mutation_node \n", mutation_node.fancy_print())
+        #print()
 
         if not chosen_node.terminal:
             chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)] = mutation_node
@@ -988,12 +990,12 @@ class Engine:
                  exp_prefix = '',
                  device='/cpu:0',
                  do_bgr=False,
+                 polar_coordinates=False,
                  image_extension=None,
                  graphic_extension=None,
                  minimal_print=False,
 
                  save_log=True,
-
                  write_engine_state=True,
 
                  initial_test_device=True,
@@ -1039,6 +1041,7 @@ class Engine:
         self.save_graphics = save_graphics
         self.show_graphics = show_graphics
         self.do_bgr = do_bgr
+        self.polar_coordinates = polar_coordinates
 
         if bloat_control not in ['very heavy', 'heavy', 'weak']:  # add full_dynamic_size, dynamic_size
             bloat_control = 'off'
@@ -1078,7 +1081,7 @@ class Engine:
 
         self.dynamic_limit = min(dynamic_limit, self.max_tree_depth)
         self.initial_dynamic_limit = self.dynamic_limit
-        max_overall_dynamic_limit = 100 if self.bloat_mode == 'depth' else 2147483647
+        max_overall_dynamic_limit = 50 if self.bloat_mode == 'depth' else 2147483647
         self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size, max_overall_dynamic_limit)
         self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size, max_overall_dynamic_limit)
         if self.min_overall_size > self.max_overall_size: self.min_overall_size, self.max_overall_size = self.max_overall_size, self.min_overall_size
@@ -1950,11 +1953,14 @@ class Engine:
                     while member_depth > self.max_tree_depth and rcnt < self.max_retries:
                         indiv_temp, parent, plist = self.selection()
                         member_depth, member_nodes = indiv_temp.get_depth()
+
                         rcnt += 1
                     if member_depth > self.max_tree_depth:
                         indiv_temp = parent['tree']
                         member_depth = parent['depth']
                         member_nodes = parent['nodes']
+
+                    #print("retries: ", rcnt)
 
                     retrie_cnt.append(rcnt)
                 else:
@@ -2474,8 +2480,15 @@ class Terminal_Set:
         #if engine ref is None then we also did not define the domain and codomain so make an empty set
         if engref is not None:
             self.set = self.make_term_variables(0, effective_dim, resolution, function_ptr_to_var_node)  # x, y
+            if effective_dim >= 2 and self.engref.polar_coordinates:
+                x = self.set['x']
+                y = self.set['y']
+                y = y * - 1
+                self.set['x'] = np.abs(np.arctan2(x, y))
+                self.set['y'] = np.sqrt(x**2+y**2)
         else:
             self.set = {}
+
         self.latentset = self.make_term_variables(effective_dim, len(resolution), resolution,
                                                   function_ptr_to_var_node)  # z for terminal
 
@@ -2493,11 +2506,14 @@ class Terminal_Set:
                 if digit <= 0:
                     break
 
-            if self.debug > 2: print("[DEBUG]:\tAdded terminal " + str(name))
+            if self.debug > 2:
+                print("[DEBUG]:\tAdded terminal " + str(name))
 
             vari = i  # TODO: ye, this is because of images, right?....
-            if i < 2: vari = 1 - i
+            if i < 2:
+                vari = 1 - i
             res[name] = fptr(np.copy(resolution), vari)
+
         return res
 
     def add_to_set(self, name, t, engref=None):
