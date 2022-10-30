@@ -990,7 +990,11 @@ class Engine:
                  exp_prefix = '',
                  device='/cpu:0',
                  do_bgr=False,
+
                  polar_coordinates=False,
+                 do_polar_mask=True,
+                 polar_mask_value=None,
+
                  image_extension=None,
                  graphic_extension=None,
                  minimal_print=False,
@@ -1041,7 +1045,6 @@ class Engine:
         self.save_graphics = save_graphics
         self.show_graphics = show_graphics
         self.do_bgr = do_bgr
-        self.polar_coordinates = polar_coordinates
 
         if bloat_control not in ['very heavy', 'heavy', 'weak']:  # add full_dynamic_size, dynamic_size
             bloat_control = 'off'
@@ -1118,6 +1121,11 @@ class Engine:
         self.save_image_pop = save_image_pop
         self.save_state = 0
         self.last_stop = 0
+
+        self.polar_coordinates = polar_coordinates
+        self.do_polar_mask = do_polar_mask
+        self.polar_mask_value = 0 if None else polar_mask_value
+        self.polar_mask = tf.ones(self.target_dims, dtype=tf.float32)
 
 
         if mutation_funcs is None or mutation_funcs == []:
@@ -1417,7 +1425,7 @@ class Engine:
 
     def get_json(self):
         return json.dumps(self, default=default_json, cls=NumpyEncoder, sort_keys=True, indent=4)
-        #return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+        # return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
 
     def get_terminals(self, node):
@@ -2484,8 +2492,12 @@ class Terminal_Set:
                 x = self.set['x']
                 y = self.set['y']
                 y = y * - 1
-                self.set['x'] = np.abs(np.arctan2(x, y))
-                self.set['y'] = np.sqrt(x**2+y**2)
+                xy_dist = x ** 2 + y ** 2
+                self.set['x'] = tf.math.abs(tf.math.atan2(x, y))
+                self.set['y'] = tf.math.sqrt(xy_dist)
+                if self.engref.do_polar_mask:
+                    mask_val = self.engref.polar_mask_value
+                    self.engref.polar_mask = tf.where(xy_dist > 1, mask_val, self.engref.polar_mask)
         else:
             self.set = {}
 
