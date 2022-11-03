@@ -389,6 +389,31 @@ class Node:
                     max_d = child_depth
             return max_d, n_childs
 
+    def get_node_c(self, n):
+        if n == 0:
+            return self, 0
+        else:
+            node = None
+            if not self.terminal:
+                i = 0
+                for c in self.children:
+                    node, t = c.get_node_c(n - i - 1)
+                    i += t
+                    if node is not None:
+                        break
+                return node, i + 1
+            else:
+                return None, 1
+
+    def debug_print_node(self):
+        print("\nFancy node print")
+        print(self.fancy_print())
+        d, n = self.get_depth()
+        for i in range(n):
+            res_node, _ = self.get_node_c(i)
+            print("subtree w/ node count " + str(i) + " :", res_node.get_str())
+
+
 
 ## ====================== Utility methods ====================== ##
 
@@ -686,6 +711,80 @@ def default_json(obj):
 class Engine:
 
     ## ====================== genetic operators ====================== ##
+    def crossover_debug(self, parent_1, parent_2, koza_rule_val = None, koza_child = None,
+                        parent_1_node = None, parent_2_node = None, parent_2_child = None):
+        crossover_node = None
+
+        koza_rule_val = self.engine_rng.random() if koza_rule_val is None else koza_rule_val
+
+        if koza_rule_val < self.koza_rule_prob and not parent_1.terminal:
+            # function crossover
+            if parent_1_node is None:
+                parent_1_candidates = self.list_nodes(parent_1, True, add_funcs=True, add_terms=False, add_root=True)
+                parent_1_chosen_node, _ = self.engine_rng.choice(parent_1_candidates)
+            else:
+                parent_1_chosen_node, _ = parent_1.get_node_c(parent_1_node)
+
+            possible_children = []
+            for i in range(len(parent_1_chosen_node.children)):
+                if not parent_1_chosen_node.children[i].terminal:
+                    possible_children.append(i)
+            if possible_children != []:
+                if koza_child is None:
+                    crossover_node = copy.deepcopy(parent_1_chosen_node.children[self.engine_rng.choice(possible_children)])
+                else:
+                    if len(possible_children) <= koza_child:
+                        print("[ERROR]: Out of bondaries for second parent 1.")
+                        parent_2_child = clamp(0, koza_child, len(possible_children) - 1)
+                    crossover_node = copy.deepcopy(parent_1_chosen_node.children[koza_child])
+            else:
+                crossover_node = copy.deepcopy(parent_1_chosen_node)
+
+        else:
+            if parent_1_node is None:
+                parent_1_terminals = self.get_terminals(parent_1)
+                crossover_node = copy.deepcopy(self.engine_rng.choice(list(parent_1_terminals.elements())))
+            else:
+                parent_1_chosen_node, _ = parent_1.get_node_c(parent_1_node)
+                crossover_node = copy.deepcopy(parent_1_chosen_node)
+
+
+        if crossover_node is None:
+            print("[ERROR]: Did not select a crossover node.")
+        new_ind = copy.deepcopy(parent_2)
+
+
+        if parent_2_node is None:
+            parent_2_candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=True)
+
+            if len(parent_2_candidates) > 0:
+                parent_2_chosen_node, _ = self.engine_rng.choice(parent_2_candidates)
+                len_parent_2_children = len(parent_2_chosen_node.children)
+                if not parent_2_chosen_node.terminal and len_parent_2_children > 0:
+                    rand_child = self.engine_rng.randint(0, len_parent_2_children - 1)
+                    parent_2_chosen_node.children[rand_child] = crossover_node
+                else:
+                    new_ind = crossover_node
+            else:
+                new_ind = crossover_node
+        else:
+            parent_2_chosen_node, _ = parent_2.get_node_c(parent_2_node)
+            len_parent_2_children = len(parent_2_chosen_node.children)
+            if not parent_2_chosen_node.terminal and len_parent_2_children > 0:
+                if parent_2_child is None:
+                    rand_child = self.engine_rng.randint(0, len_parent_2_children - 1)
+                    parent_2_chosen_node.children[rand_child] = crossover_node
+                else:
+                    if len_parent_2_children <= parent_2_child:
+                        print("[ERROR]: Out of bondaries for second parent 2.")
+                        parent_2_child = clamp(0, parent_2_child, len_parent_2_children - 1)
+                    parent_2_chosen_node.children[parent_2_child] = crossover_node
+            else:
+                new_ind = crossover_node
+
+        return new_ind
+
+
     def crossover(self, parent_1, parent_2):
         crossover_node = None
 
@@ -1007,7 +1106,8 @@ class Engine:
                  graphics_file_path=None,
                  pop_file_path=None,
                  run_dir_path=None,
-                 read_init_pop_from_file=None):
+                 read_init_pop_from_file=None, # to be deprecated
+                 read_init_pop_from_source=None):
 
         # start timers
         self.last_engine_time = time.time()
@@ -1110,7 +1210,7 @@ class Engine:
         self.image_extension = '.' + (image_extension if (image_extension in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
         self.graphic_extension = '.' + (graphic_extension if (graphic_extension in ['pdf', 'png', 'jpg', 'jpeg']) else 'pdf')
         self.replace_prob = max(0.0, min(1.0, replace_prob))
-        self.pop_file = read_init_pop_from_file
+        self.pop_source = read_init_pop_from_file if read_init_pop_from_file is not None else read_init_pop_from_source
         self.save_log = save_log
         self.write_engine_state = write_engine_state
         self.save_image_best = save_image_best
@@ -1414,7 +1514,7 @@ class Engine:
             summary_str += "Population file: " + str(self.pop_file_path) + "\n"
             summary_str += "Stats file: " + str(self.stats_file_path) + "\n"
             summary_str += "Graphics file: " + str(self.graphics_file_path) + "\n"
-            summary_str += "Initial pop file: " + str(self.pop_file) + "\n"
+            summary_str += "Initial pop source: " + str(self.pop_source) + "\n"
 
         if experiment or force_print:
             summary_str += "\n============ Experiment Information ============\n"
@@ -1721,35 +1821,37 @@ class Engine:
         # convert expressions to trees
         return self.generate_pop_from_expr(strs)
 
-    def initialize_population(self, max_depth, min_depth, individuals, method, max_nodes, read_from_file=None):
-        start_init_population = time.time()
 
-        if read_from_file is None:
+    def initialize_population(self, max_depth=8, min_depth=-1, individuals=100, method='ramped half-and-half',
+                              max_nodes=-1, read_from=None):
+        start_init_population = time.time()
+        if read_from is None: # generate randomly
             nodes_generated, population = self.generate_population(individuals, method, max_nodes, max_depth, min_depth)
         else:
-            if ".txt" not in read_from_file:
-                print(bcolors.FAIL + "[ERROR]:\tCould not read from file: " + str(
-                    read_from_file) + ", randomly generating population instead.", bcolors.ENDC)
-                read_from_file = None
+
+            maxpopd = -1
+            if isinstance(read_from, str) and ".txt" in read_from: # read from file
+                population, nodes_generated, maxpopd = self.generate_pop_from_file(read_from_file=read_from,
+                                                                                   pop_size=self.population_size)
+            elif isinstance(read_from, list): # generate from list of strs
+
+                population, nodes_generated, maxpopd = self.generate_pop_from_expr(read_from)
+
+            else: # give warning generate randomly
+                print(bcolors.FAIL + "[ERROR]:\tCould not read from source: " + str(
+                    read_from) + ", not a list of strinmgs and not a file, randomly generating population instead.",
+                      bcolors.ENDC)
+                read_from = None
                 nodes_generated, population = self.generate_population(individuals, method, max_nodes, max_depth,
                                                                        min_depth)
-            else:  # read from population files
-
-                population, nodes_generated, maxpopd = self.generate_pop_from_file(read_from_file,
-                                                                                   pop_size=self.population_size)
-                # open population files
-
-                if maxpopd > self.max_tree_depth:
-                    newmaxpopd = max(maxpopd, self.max_tree_depth)
-                    print(bcolors.WARNING + "[WARNING]:\tMax depth of input trees (" + str(
-                        maxpopd) + ") is higher than defined max tree depth (" +
-                          str(self.max_tree_depth) + "), clipping max tree depth value to " + str(newmaxpopd),
-                          bcolors.ENDC)
-                    self.max_tree_depth = newmaxpopd
-
-                if self.debug > 0:
-                    for p in population:
-                        print(p['tree'].get_str())
+            # ajust depth if needed
+            if maxpopd > self.max_tree_depth:
+                newmaxpopd = max(maxpopd, self.max_tree_depth)
+                print(bcolors.WARNING + "[WARNING]:\tMax depth of input trees (" + str(
+                    maxpopd) + ") is higher than defined max tree depth (" +
+                      str(self.max_tree_depth) + "), clipping max tree depth value to " + str(newmaxpopd),
+                      bcolors.ENDC)
+                self.max_tree_depth = newmaxpopd
 
         tree_generation_time = time.time() - start_init_population
 
@@ -1761,9 +1863,9 @@ class Engine:
 
         total_time = self.recent_fitness_time + self.recent_tensor_time
 
-        if self.debug > 0:  # print info
+        if self.debug > 1:  # print detailed method info
             print("\nInitial Population: ")
-            print("Generation method: " + ("Ramdom expression" if (read_from_file is None) else "Read from file"))
+            print("Generation method: " + ("Ramdom expression" if (read_from is None) else "Read from file"))
             print("Generated trees in: " + str(tree_generation_time) + " (s)")
             print("Evaluated Individuals in: " + str(total_time) + " (s)")
             print("\nIndividual(s): ")
@@ -1812,14 +1914,14 @@ class Engine:
         # tensors = []
         if isinstance(expressions, str):
             pop, number_nodes, max_dep = self.generate_pop_from_file(expressions)
-            time_taken = self.calculate_tensors(pop)
+            tensors, time_taken = self.calculate_tensors(pop)
         elif isinstance(expressions, list):
             # for p in expressions:
             #    print(p)
             #    _, node = str_to_tree(p, self.terminal.set)
             #    tensors.append(node)
             pop, number_nodes, max_dep = self.generate_pop_from_expr(expressions)
-            time_taken = self.calculate_tensors(pop)
+            tensors, time_taken = self.calculate_tensors(pop)
         else:
             print(bcolors.FAIL + "[ERROR]:\tTo generate images from a population please enter either"
                                  " a file or a list with the corresponding expressions.", bcolors.ENDC)
@@ -1848,7 +1950,7 @@ class Engine:
         if self.save_state > 0:
             self.restart(stop_value)
 
-        if self.fitness_func is None and ((self.pop_file is None) or (self.stop_value > 0)):
+        if self.fitness_func is None and ((self.pop_source is None) or (self.stop_value > 0)):
             print(bcolors.FAIL + "[ERROR]:\tFitness function must be defined to run evolutionary process.",
                   bcolors.ENDC)
             return
@@ -1881,12 +1983,12 @@ class Engine:
             if start_from_last_pop < self.population_size or self.save_state == 0:
                 self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
-                population, best = self.initialize_population(self.max_init_depth,
-                                                              self.min_init_depth,
-                                                              self.population_size - start_from_last_pop,
-                                                              self.method,
-                                                              self.max_nodes,
-                                                              read_from_file=self.pop_file)
+                population, best = self.initialize_population(max_depth=self.max_init_depth,
+                                                              min_depth=self.min_init_depth,
+                                                              individuals=self.population_size - start_from_last_pop,
+                                                              method=self.method,
+                                                              max_nodes=self.max_nodes,
+                                                              read_from=self.pop_source)
 
                 if start_from_last_pop > 0:
                     if self.objective == 'minimizing':
