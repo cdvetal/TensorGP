@@ -707,8 +707,8 @@ class Engine:
 
         if crossover_node is None:
             print("[ERROR]: Did not select a crossover node.")
-        new_individual = copy.deepcopy(parent_2)
-        parent_2_candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
+        new_ind = copy.deepcopy(parent_2)
+        parent_2_candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=True)
 
         if len(parent_2_candidates) > 0:
             parent_2_chosen_node, _ = self.engine_rng.choice(parent_2_candidates)
@@ -716,11 +716,11 @@ class Engine:
                 rand_child = self.engine_rng.randint(0, len(parent_2_chosen_node.children) - 1)
                 parent_2_chosen_node.children[rand_child] = crossover_node
             else:
-                new_individual = crossover_node
+                new_ind = crossover_node
         else:
-            new_individual = crossover_node
+            new_ind = crossover_node
 
-        return new_individual
+        return new_ind
 
     def get_candidates(self, node, root):
         candidates = Counter()
@@ -767,39 +767,37 @@ class Engine:
         return Node(value=n.value, terminal=n.terminal, children=[]+n.children)
 
     def delete_mutation(self, parent):
-        new_individual = copy.deepcopy(parent)
+        new_ind = copy.deepcopy(parent)
 
         # every node except last depth (terminals)
-        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=False)
-        if not new_individual.terminal: candidates.append(new_individual)
-
-
+        candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=False)
+        if not new_ind.terminal: candidates.append((new_ind, 0))
 
         if len(candidates) > 0:
 
-            #chosen_node, _ = self.engine_rng.choice(candidates)  # parent = root
-            chosen_node = new_individual
+            chosen_node, _ = self.engine_rng.choice(candidates)  # parent = root
+            #chosen_node = new_ind
 
             # random child of chosen
             chosen_child = chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)]
-            #new_individual = self.copy_node(chosen_child)
+            #new_ind = self.copy_node(chosen_child)
 
             chosen_node.value = chosen_child.value
-            chosen_node.children = chosen_child.children
             chosen_node.terminal = chosen_child.terminal
+            chosen_node.children = chosen_child.children # does not need []
 
-        return new_individual
+        return new_ind
 
     def insert_mutation(self, parent):
-        new_individual = copy.deepcopy(parent)
-        # print("[DEBUG D] Before:\t" + new_individual.get_str())
+        new_ind = copy.deepcopy(parent)
+        # print("[DEBUG D] Before:\t" + new_ind.get_str())
 
         # every node except last depth (terminals)
-        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
+        candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=True)
 
         if len(candidates) > 1 or (len(candidates) == 1 and not candidates[0][0].terminal):
             chosen_node, _ = self.engine_rng.choice(candidates)
-            # print(new_individual.get_str())
+            # print(new_ind.get_str())
 
             # Insert node between choosen and choosen's child
             # random child of chosen
@@ -807,14 +805,14 @@ class Engine:
             if not chosen_node.terminal and len(chosen_node.children) > 0:
                 chosen_child = chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)]
             else:
-                chosen_child = new_individual
+                chosen_child = new_ind
         else:
-            chosen_child = new_individual
+            chosen_child = new_ind
 
         _v = chosen_child.value
-        _c = chosen_child.children
         _t = chosen_child.terminal
-        child_temp = Node(value=_v, children=_c, terminal=_t)
+        _c = chosen_child.children
+        child_temp = self.copy_node(chosen_child)
 
         chosen_child.value = self.engine_rng.choice(list(self.function.set))
         chosen_child.terminal = False
@@ -828,7 +826,7 @@ class Engine:
                 chosen_child.children.append(child_temp)
             else:
                 chosen_child.children.append(self.random_terminal())
-        return new_individual
+        return new_ind
 
     def list_nodes(self, node, dep=0, root=False, add_funcs=True, add_terms=True, add_root=False):
         res = []
@@ -842,9 +840,9 @@ class Engine:
 
     # This is the same , except it does not go back to the loop
     def hacky_subtree_mutation(self, parent):
-        new_individual = copy.deepcopy(parent)
-        # print("\nindiv, ", new_individual.get_str())
-        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
+        new_ind = copy.deepcopy(parent)
+        # print("\nindiv, ", new_ind.get_str())
+        candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=True)
 
         chosen_node, chosen_dep = self.engine_rng.choice(candidates)
         _max_dep = max((self.max_tree_depth - chosen_dep) - 1, 0)
@@ -858,14 +856,14 @@ class Engine:
         if not chosen_node.terminal:
             chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)] = mutation_node
         else:  # means its root in this case
-            new_individual = mutation_node
-        return new_individual
+            new_ind = mutation_node
+        return new_ind
 
     def subtree_mutation(self, parent):
-        new_individual = copy.deepcopy(parent)
-        # candidates = self.get_candidates(new_individual, True)
-        # print("\nindiv, ", new_individual.get_str())
-        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=False, add_root=True)
+        new_ind = copy.deepcopy(parent)
+        # candidates = self.get_candidates(new_ind, True)
+        # print("\nindiv, ", new_ind.get_str())
+        candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=True)
 
         chosen_node, _ = self.engine_rng.choice(candidates)
         _, mutation_node = self.generate_program('grow', -1, max_depth=self.max_subtree_dep,
@@ -874,8 +872,8 @@ class Engine:
         if not chosen_node.terminal:
             chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)] = mutation_node
         else:  # means its root in this case
-            new_individual = mutation_node
-        return new_individual
+            new_ind = mutation_node
+        return new_ind
 
     # TODO: Support for genetic operators per node
     def replace_nodes(self, node):
@@ -920,11 +918,11 @@ class Engine:
                     self.replace_nodes(i)
 
     def point_mutation(self, parent):
-        new_individual = copy.deepcopy(parent)
-        candidates = self.list_nodes(new_individual, root=True, add_funcs=True, add_terms=True, add_root=True)
+        new_ind = copy.deepcopy(parent)
+        candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=True, add_root=True)
         chosen_node, _ = self.engine_rng.choice(candidates)
         self.replace_nodes(chosen_node)
-        return new_individual
+        return new_ind
 
     def __init__(self,
                  fitness_func=None,
@@ -1122,11 +1120,6 @@ class Engine:
         self.save_state = 0
         self.last_stop = 0
 
-        self.polar_coordinates = polar_coordinates
-        self.do_polar_mask = do_polar_mask
-        self.polar_mask_value = 0 if None else polar_mask_value
-        self.polar_mask = tf.ones(self.target_dims, dtype=tf.float32)
-
 
         if mutation_funcs is None or mutation_funcs == []:
             mut_funcs_implemented = 4
@@ -1168,6 +1161,12 @@ class Engine:
                 _final_transform = [float(final_transform[0]), float(final_transform[1])]
             _final_transform_delta = _final_transform[1] - _final_transform[0]
 
+        self.polar_coordinates = polar_coordinates
+        self.do_polar_mask = do_polar_mask
+        self.polar_mask_value = _codomain[0] if polar_mask_value is None else polar_mask_value
+        self.polar_mask = tf.ones(self.target_dims, dtype=tf.float32)
+
+
         if const_range is None or len(const_range) < 1:
             self.erc_min = _domain[0]
             self.erc_max = _domain[1]
@@ -1196,6 +1195,7 @@ class Engine:
 
         # print("x tensor: ", self.terminal.set['x'])
         # print("y tensor: ", self.terminal.set['y'])
+
 
         if isinstance(target, str):
             # target = 'mult(scalar(127.5), ' + target + ')'
@@ -1592,10 +1592,15 @@ class Engine:
         #print("T2:\n", final_tensor.numpy())
         final_tensor = self.codomain_range(final_tensor)
         #print("T3:\n", final_tensor.numpy())
+
+        if self.do_polar_mask:
+            final_tensor = tf.where(self.polar_mask == 1, final_tensor, self.polar_mask_value)
+        # print("T4:\n", final_tensor.numpy())
+
         if self.do_final_transform:
-            #print("doing transform")
             final_tensor = get_final_transform(final_tensor, _final_transform_delta, _final_transform[0])
-        #print("T4:\n", final_tensor.numpy())
+        # print("T5:\n", final_tensor.numpy())
+
         return final_tensor
 
     #def final_transform_domain(self, final_tensor):
@@ -1639,13 +1644,14 @@ class Engine:
         if self.debug > 4: print("Assessing fitness of individuals...")
         _s = time.time()
         # Notes: measuring time should not be up to the fit function writer. We should provide as much info as possible
-        # Maybe best pop shouldnt be required
+        # Maybe best pop shouldn't be required
 
         population, best_ind = self.fitness_func(generation=self.current_generation,
                                                  population=population,
                                                  tensors=tensors,
                                                  f_path=f_path,
                                                  image_extension=self.image_extension,
+
                                                  rng=self.engine_rng,
                                                  objective=self.objective,
                                                  resolution=self.target_dims,
@@ -2496,8 +2502,7 @@ class Terminal_Set:
                 self.set['x'] = tf.math.abs(tf.math.atan2(x, y))
                 self.set['y'] = tf.math.sqrt(xy_dist)
                 if self.engref.do_polar_mask:
-                    mask_val = self.engref.polar_mask_value
-                    self.engref.polar_mask = tf.where(xy_dist > 1, mask_val, self.engref.polar_mask)
+                    self.engref.polar_mask = tf.where(xy_dist > 1, 0, 1)
         else:
             self.set = {}
 
