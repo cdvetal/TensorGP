@@ -389,7 +389,7 @@ class Node:
                     max_d = child_depth
             return max_d, n_childs
 
-    def get_node_c(self, n):
+    def get_node_c(self, n, count_terms=True, count_funcs=True):
         if n == 0:
             return self, 0
         else:
@@ -397,13 +397,13 @@ class Node:
             if not self.terminal:
                 i = 0
                 for c in self.children:
-                    node, t = c.get_node_c(n - i - 1)
+                    node, t = c.get_node_c(n - i - count_funcs)
                     i += t
                     if node is not None:
                         break
-                return node, i + 1
+                return node, i + count_funcs
             else:
-                return None, 1
+                return None, count_terms
 
     def debug_print_node(self):
         print("\nFancy node print")
@@ -1751,7 +1751,7 @@ class Engine:
                                                  tensors=tensors,
                                                  f_path=f_path,
                                                  image_extension=self.image_extension,
-
+                                                 polar_mask=self.polar_mask,
                                                  rng=self.engine_rng,
                                                  objective=self.objective,
                                                  resolution=self.target_dims,
@@ -1762,21 +1762,9 @@ class Engine:
                                                  debug=False if (self.debug == 0) else True)
         fitness_time = time.time() - _s
 
-        if self.can_save_image_best():
-            # Save Best Image
-            fn = self.experiment.bests_directory + "best_gen" + str(self.current_generation).zfill(5)
-            save_image(population[best_ind]['tensor'], best_ind, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
-
-        if self.can_save_image_pop():
-            # Save Population Images
-            if self.save_image_pop:
-                for i in range(len(population)):
-                    fn = self.experiment.cur_image_directory + "gen" + str(self.current_generation).zfill(5)
-                    save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
-
         self.elapsed_fitness_time += fitness_time
         self.recent_fitness_time = fitness_time
-        if self.debug > 4: print("Assessed " + str(len(population)) + " fitness tensors in (s): " + str(fitness_time))
+        if self.debug > 4: print("Assessed " + str(len(population)) + " tensors in (s): " + str(fitness_time))
 
         return population, population[best_ind]
 
@@ -1860,7 +1848,6 @@ class Engine:
             self.print_population(population)
 
         population, best_pop = self.fitness_func_wrap(population=population, f_path=self.experiment.cur_image_directory)
-
         total_time = self.recent_fitness_time + self.recent_tensor_time
 
         if self.debug > 1:  # print detailed method info
@@ -1989,7 +1976,7 @@ class Engine:
                                                               method=self.method,
                                                               max_nodes=self.max_nodes,
                                                               read_from=self.pop_source)
-
+                """
                 if start_from_last_pop > 0:
                     if self.objective == 'minimizing':
                         meta_elite = nsmallest(start_from_last_pop, self.population, key=itemgetter('fitness'))
@@ -2000,13 +1987,24 @@ class Engine:
                         if meta_elite[0]['fitness'] > best['fitness']:
                             best = meta_elite[0]
                     population += meta_elite
+                """
+
+                if start_from_last_pop > 0:
+                    meta_elite = self.get_n_best_from_pop(population=self.population, n=start_from_last_pop)
+                    if self.condition_local(meta_elite[0]['fitness']):
+                        best = meta_elite[0]
+                    population += meta_elite
 
                 self.population = population
                 self.best = best
                 self.best_overall = copy.deepcopy(self.best)
 
-                # Print Initial Population
-                # self.print_population(population, False)
+                # Print initial population
+                if self.debug > 1:
+                    self.print_population(population=population, minimal=False)
+
+                # save pop and bests
+                self.save_pop_and_bests(population=self.population)
 
                 # write first gen data
                 self.write_pop_to_csv(self.pop_file_path)
@@ -2053,10 +2051,7 @@ class Engine:
             # TODO: immigrate individuals (archive)
 
             # Create new population of individuals
-            if self.objective == 'minimizing':
-                new_population = nsmallest(self.elitism, self.population, key=itemgetter('fitness'))
-            else:
-                new_population = nlargest(self.elitism, self.population, key=itemgetter('fitness'))
+            new_population = self.get_n_best_from_pop(population=self.population, n=self.elitism)
 
             temp_population = []
             retrie_cnt = []
@@ -2096,10 +2091,6 @@ class Engine:
             # calculate fitness of the new population
             temp_population, temp_best = self.fitness_func_wrap(population=temp_population,
                                                                 f_path=self.experiment.current_directory)
-            if self.condition_local(temp_best['fitness']):
-                # we should not need to do deepcopy here
-                self.best = copy.deepcopy(temp_best)
-
 
             # bloat control:
             #
@@ -2187,10 +2178,16 @@ class Engine:
                     if not ind['valid']:
                         illegals += 1
 
-            # update best and population
+            # update population
+            self.population = new_population
+
+            # update best gen and overall
+            self.best = copy.deepcopy(self.get_n_best_from_pop(population=self.population, n=1)[0])
             if self.condition_overall(self.best['fitness']):
                 self.best_overall = copy.deepcopy(self.best)
-            self.population = new_population
+
+            # save pop and bests
+            self.save_pop_and_bests(population=self.population)
 
             # update engine time
             self.update_engine_time()
@@ -2293,6 +2290,31 @@ class Engine:
         #print("Indiv temp dep: ", indiv_temp.get_depth(), " with str: ", indiv_temp.get_str())
 
         return indiv_temp, parent, plist
+
+
+    def get_n_best_from_pop(self, population, n):
+        if self.objective == 'minimizing':
+            elite = nsmallest(n, population, key=itemgetter('fitness'))
+        else:
+            elite = nlargest(n, population, key=itemgetter('fitness'))
+        return elite
+
+
+    def save_pop_and_bests(self, population):
+        if self.can_save_image_best():
+            # Save Best Image
+            fn = self.experiment.bests_directory + "best_gen" + str(self.current_generation).zfill(5)
+            save_image(self.best['tensor'], 0, fn, self.target_dims, BGR=self.do_bgr,
+                       extension=self.image_extension)
+
+        if self.can_save_image_pop():
+            # Save Population Images
+            if self.save_image_pop:
+                for i in range(len(population)):
+                    fn = self.experiment.cur_image_directory + "gen" + str(self.current_generation).zfill(5)
+                    save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr,
+                               extension=self.image_extension)
+
 
     def graph_statistics(self, extension=".pdf"):
 
