@@ -140,7 +140,7 @@ def resolve_exp_node(child1, dims=[]):
 
 
 def resolve_if_node(child1, child2, child3, dims=[]):
-    return tf.where(child3 < 0, child1, child2)
+    return tf.where(child1 < 0, child2, child3)
 
 
 def resolve_log_node(child1, dims=[]):
@@ -414,15 +414,15 @@ class Node:
             print("subtree w/ node count " + str(i) + " :", res_node.get_str())
 
 
-
 ## ====================== Utility methods ====================== ##
 
 def constrain(a, n, b):
     return min(max(n, a), b)
 
 
-def get_func_name(func, default = "Not callable"):
+def get_func_name(func, default="Not callable"):
     return func.__name__ if callable(func) else default
+
 
 # Map from codomain range to a specified final transform range
 def get_final_transform(tensor, ft_delta, ft_min):
@@ -431,7 +431,7 @@ def get_final_transform(tensor, ft_delta, ft_min):
 
 def get_np_array(tensor):
     # check if tensor is in image range (0..255)
-    if ((not((not _do_final_transform) and _codomain[0] == 0.0 and _codomain[1] == 255.0)) and  (not (
+    if ((not ((not _do_final_transform) and _codomain[0] == 0.0 and _codomain[1] == 255.0)) and (not (
             _do_final_transform and _final_transform[0] == 0.0 and _final_transform[1] == 255.0))):
         tensor = get_final_transform(tensor, 255.0, 0.0)
     return np.array(tensor, dtype='uint8')
@@ -444,11 +444,11 @@ def save_image(tensor, index, fn, dims, sufix='', extension=".png", BGR=False): 
     path = fn + "_ind" + str(index).zfill(5) + sufix + extension
     aux = get_np_array(tensor)
 
-    #print()
-    #print("ft0", _final_transform[0])
-    #print("ft1", _final_transform[1])
+    # print()
+    # print("ft0", _final_transform[0])
+    # print("ft1", _final_transform[1])
 
-    #aux = np.array(tensor, dtype='uint8')
+    # aux = np.array(tensor, dtype='uint8')
 
     try:
         if len(dims) == 2:
@@ -500,8 +500,8 @@ def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain=Tru
 
         number_nodes, tree = str_to_tree_normal(args[last_pos:], terminal_set, number_nodes, constrain_domain)
         children.append(tree)
-        if primitive == "if":
-            children = [children[1], children[2], children[0]]
+        #if primitive == "if":
+        #    children = [children[1], children[2], children[0]]
         return number_nodes + 1, Node(value=primitive, terminal=False, children=children)
 
 
@@ -598,7 +598,8 @@ class Experiment:
         self.filename = self.set_experiment_filename(addon=addon)
 
         try:
-            self.working_directory = (os.getcwd() + sub_wd + addon + _tgp_delimiter + self.filename + _tgp_delimiter) if wd is None else wd
+            self.working_directory = (
+                        os.getcwd() + sub_wd + addon + _tgp_delimiter + self.filename + _tgp_delimiter) if wd is None else wd
             os.makedirs(self.working_directory)
         except OSError as error:
             if error is FileExistsError:
@@ -620,7 +621,7 @@ class Experiment:
         self.all_directory = self.image_directory + "all" + _tgp_delimiter
         # TODO: transform immigration into archive
         self.immigration_directory = (
-                    self.image_directory + "immigration" + _tgp_delimiter) if immigration is not None else os.getcwd()
+                self.image_directory + "immigration" + _tgp_delimiter) if immigration is not None else os.getcwd()
         self.logging_directory = self.working_directory + "logs" + _tgp_delimiter
         self.generations_directory = self.logging_directory + "generations" + _tgp_delimiter
         self.graphs_directory = self.working_directory
@@ -673,6 +674,7 @@ def new_individual(tree, fitness=0, depth=0, nodes=0, tensor=[], valid=True, par
     return {'tree': tree, 'fitness': fitness, 'depth': depth, 'nodes': nodes, 'tensor': tensor, 'valid': valid,
             'parents': parents, 'weights': weights}
 
+
 def get_ind_str(ind, fancy_print=False, stats=False, limit_fancy_print=1000):
     res = ind['tree'].fancy_print() if (fancy_print and ind['nodes'] < limit_fancy_print) else ind['tree'].get_str()
     if stats:
@@ -683,7 +685,8 @@ def get_ind_str(ind, fancy_print=False, stats=False, limit_fancy_print=1000):
         res += "Valid: " + str(ind['valid']) + "\n"
     return res + "\n"
 
-def g_population(population, fancy_print=False, stats=False,limit_fancy_print=1000):
+
+def g_population(population, fancy_print=False, stats=False, limit_fancy_print=1000):
     res = ''
     for p in population:
         res += get_ind_str(p, fancy_print=fancy_print, stats=stats, limit_fancy_print=limit_fancy_print)
@@ -697,13 +700,14 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
+
 def default_json(obj):
     if isinstance(obj, list):
         return [str(a) for a in obj]
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
     return obj.__dict__
-    #return json.JSONEncoder.default(self, obj)
+    # return json.JSONEncoder.default(self, obj)
 
 
 ## ====================== Engine ====================== ##
@@ -711,8 +715,8 @@ def default_json(obj):
 class Engine:
 
     ## ====================== genetic operators ====================== ##
-    def crossover_debug(self, parent_1, parent_2, koza_rule_val = None, koza_child = None,
-                        parent_1_node = None, parent_2_node = None, parent_2_child = None):
+    def crossover_debug(self, parent_1, parent_2, koza_rule_val=None, koza_child=None,
+                        parent_1_node=None, parent_2_node=None, parent_2_child=None):
         crossover_node = None
 
         koza_rule_val = self.engine_rng.random() if koza_rule_val is None else koza_rule_val
@@ -731,7 +735,8 @@ class Engine:
                     possible_children.append(i)
             if possible_children != []:
                 if koza_child is None:
-                    crossover_node = copy.deepcopy(parent_1_chosen_node.children[self.engine_rng.choice(possible_children)])
+                    crossover_node = copy.deepcopy(
+                        parent_1_chosen_node.children[self.engine_rng.choice(possible_children)])
                 else:
                     if len(possible_children) <= koza_child:
                         print("[ERROR]: Out of bondaries for second parent 1.")
@@ -748,11 +753,9 @@ class Engine:
                 parent_1_chosen_node, _ = parent_1.get_node_c(parent_1_node)
                 crossover_node = copy.deepcopy(parent_1_chosen_node)
 
-
         if crossover_node is None:
             print("[ERROR]: Did not select a crossover node.")
         new_ind = copy.deepcopy(parent_2)
-
 
         if parent_2_node is None:
             parent_2_candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=True)
@@ -783,7 +786,6 @@ class Engine:
                 new_ind = crossover_node
 
         return new_ind
-
 
     def crossover(self, parent_1, parent_2):
         crossover_node = None
@@ -857,13 +859,12 @@ class Engine:
                 else:
                     return self.mutation_funcs[k](parent)
 
-
     def random_terminal(self):
         _, node = self.generate_program(method='full', max_nodes=0, max_depth=0)
         return node
 
     def copy_node(self, n):
-        return Node(value=n.value, terminal=n.terminal, children=[]+n.children)
+        return Node(value=n.value, terminal=n.terminal, children=[] + n.children)
 
     def delete_mutation(self, parent):
         new_ind = copy.deepcopy(parent)
@@ -873,17 +874,16 @@ class Engine:
         if not new_ind.terminal: candidates.append((new_ind, 0))
 
         if len(candidates) > 0:
-
             chosen_node, _ = self.engine_rng.choice(candidates)  # parent = root
-            #chosen_node = new_ind
+            # chosen_node = new_ind
 
             # random child of chosen
             chosen_child = chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)]
-            #new_ind = self.copy_node(chosen_child)
+            # new_ind = self.copy_node(chosen_child)
 
             chosen_node.value = chosen_child.value
             chosen_node.terminal = chosen_child.terminal
-            chosen_node.children = chosen_child.children # does not need []
+            chosen_node.children = chosen_child.children  # does not need []
 
         return new_ind
 
@@ -949,8 +949,8 @@ class Engine:
         _min_dep = min(_max_dep, self.min_subtree_dep)
 
         _, mutation_node = self.generate_program('grow', -1, max_depth=_max_dep, min_depth=_min_dep, root=True)
-        #print("mutation_node \n", mutation_node.fancy_print())
-        #print()
+        # print("mutation_node \n", mutation_node.fancy_print())
+        # print()
 
         if not chosen_node.terminal:
             chosen_node.children[self.engine_rng.randint(0, len(chosen_node.children) - 1)] = mutation_node
@@ -1084,7 +1084,7 @@ class Engine:
                  save_bests=True,
                  save_bests_overall=True,
 
-                 exp_prefix = '',
+                 exp_prefix='',
                  device='/cpu:0',
                  do_bgr=False,
 
@@ -1106,7 +1106,7 @@ class Engine:
                  graphics_file_path=None,
                  pop_file_path=None,
                  run_dir_path=None,
-                 read_init_pop_from_file=None, # to be deprecated
+                 read_init_pop_from_file=None,  # to be deprecated
                  read_init_pop_from_source=None):
 
         # start timers
@@ -1116,7 +1116,6 @@ class Engine:
         self.elapsed_fitness_time = 0
         self.elapsed_tensor_time = 0
         self.elapsed_engine_time = 0
-
 
         # check for fitness func
         self.fitness_func = fitness_func
@@ -1183,14 +1182,16 @@ class Engine:
         self.dynamic_limit = min(dynamic_limit, self.max_tree_depth)
         self.initial_dynamic_limit = self.dynamic_limit
         max_overall_dynamic_limit = 50 if self.bloat_mode == 'depth' else 2147483647
-        self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size, max_overall_dynamic_limit)
-        self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size, max_overall_dynamic_limit)
+        self.min_overall_size = self.min_tree_depth if min_overall_size is None else clamp(0, min_overall_size,
+                                                                                           max_overall_dynamic_limit)
+        self.max_overall_size = self.max_tree_depth if max_overall_size is None else clamp(0, max_overall_size,
+                                                                                           max_overall_dynamic_limit)
         if self.min_overall_size > self.max_overall_size: self.min_overall_size, self.max_overall_size = self.max_overall_size, self.min_overall_size
         self.lock_dynamic_limit = lock_dynamic_limit
 
         # bloat control debug:
-        #self.get_summary(bloat=True, trees=True)
-        #print(self.get_json())
+        # self.get_summary(bloat=True, trees=True)
+        # print(self.get_json())
 
         self.stats_file_path = stats_file_path
         self.graphics_file_path = graphics_file_path
@@ -1208,7 +1209,8 @@ class Engine:
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
         self.image_extension = '.' + (image_extension if (image_extension in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
-        self.graphic_extension = '.' + (graphic_extension if (graphic_extension in ['pdf', 'png', 'jpg', 'jpeg']) else 'pdf')
+        self.graphic_extension = '.' + (
+            graphic_extension if (graphic_extension in ['pdf', 'png', 'jpg', 'jpeg']) else 'pdf')
         self.replace_prob = max(0.0, min(1.0, replace_prob))
         self.pop_source = read_init_pop_from_file if read_init_pop_from_file is not None else read_init_pop_from_source
         self.save_log = save_log
@@ -1219,7 +1221,6 @@ class Engine:
         self.save_image_pop = save_image_pop
         self.save_state = 0
         self.last_stop = 0
-
 
         if mutation_funcs is None or mutation_funcs == []:
             mut_funcs_implemented = 4
@@ -1266,7 +1267,6 @@ class Engine:
         self.polar_mask_value = _codomain[0] if polar_mask_value is None else polar_mask_value
         self.polar_mask = tf.ones(self.target_dims, dtype=tf.float32)
 
-
         if const_range is None or len(const_range) < 1:
             self.erc_min = _domain[0]
             self.erc_max = _domain[1]
@@ -1280,14 +1280,15 @@ class Engine:
         else:
             self.function = Function_Set(operators, self.effective_dims, debug=self.debug)
 
-        #define terminal set
+        # define terminal set
         if var_func is None or not callable(var_func):
             self.var_func = resolve_var_node
         else:
             self.var_func = var_func
         if isinstance(terminal_set, Terminal_Set):
             self.terminal = terminal_set
-            self.terminal.set = self.terminal.make_term_variables(0, self.effective_dims, self.target_dims, fptr=self.var_func)
+            self.terminal.set = self.terminal.make_term_variables(0, self.effective_dims, self.target_dims,
+                                                                  fptr=self.var_func)
         else:
             # self.terminal = Terminal_Set(self.effective_dims, self.target_dims, engref=self)
             self.terminal = Terminal_Set(self.effective_dims, self.target_dims, engref=self,
@@ -1295,7 +1296,6 @@ class Engine:
 
         # print("x tensor: ", self.terminal.set['x'])
         # print("y tensor: ", self.terminal.set['y'])
-
 
         if isinstance(target, str):
             # target = 'mult(scalar(127.5), ' + target + ')'
@@ -1342,15 +1342,14 @@ class Engine:
         self.population = []
         self.best = {}
         self.best_overall = {}
-        #print(self.get_json())
-
+        # print(self.get_json())
 
     ## ====================== End init class ====================== ##
 
-    def summary(self, force_print = False, print_prints=False, ind_fancy_print=False, ind_stats=False,
-                    bloat=False, trees=False, timers=False, general=False, probs=False, domain=False, graphics=False,
-                    extra=False, images=False, logs=False, paths=False, experiment=False, terminals=False,
-                    functions=False, population=False):
+    def summary(self, force_print=False, print_prints=False, ind_fancy_print=False, ind_stats=False,
+                bloat=False, trees=False, timers=False, general=False, probs=False, domain=False, graphics=False,
+                extra=False, images=False, logs=False, paths=False, experiment=False, terminals=False,
+                functions=False, population=False):
 
         summary_str = ""
         if force_print: summary_str += "Engine summary\n"
@@ -1449,9 +1448,13 @@ class Engine:
         if population or force_print:
             summary_str += "\n============ Population Information ============\n"
             summary_str += "Best individual: \n"
-            summary_str += ("Not defined" if ('tree' not in self.best) else get_ind_str(self.best, fancy_print=ind_fancy_print, stats=ind_stats)) + "\n"
+            summary_str += ("Not defined" if ('tree' not in self.best) else get_ind_str(self.best,
+                                                                                        fancy_print=ind_fancy_print,
+                                                                                        stats=ind_stats)) + "\n"
             summary_str += "Best overall individual: \n"
-            summary_str += ("Not defined" if ('tree' not in self.best_overall) else get_ind_str(self.best_overall, fancy_print=ind_fancy_print, stats=ind_stats)) + "\n"
+            summary_str += ("Not defined" if ('tree' not in self.best_overall) else get_ind_str(self.best_overall,
+                                                                                                fancy_print=ind_fancy_print,
+                                                                                                stats=ind_stats)) + "\n"
             summary_str += "Population: \n"
             summary_str += g_population(self.population, fancy_print=ind_fancy_print,
                                         stats=ind_stats, limit_fancy_print=int(max(1.0, 10000 * self.population_size)))
@@ -1522,11 +1525,9 @@ class Engine:
 
         return summary_str
 
-
     def get_json(self):
         return json.dumps(self, default=default_json, cls=NumpyEncoder, sort_keys=True, indent=4)
         # return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
-
 
     def get_terminals(self, node):
         candidates = Counter()
@@ -1545,16 +1546,19 @@ class Engine:
         return self.function
 
     def can_save_image_pop(self):
-        return self.save_image_pop and (((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
+        return self.save_image_pop and (
+                    ((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
 
     def can_save_image_best(self):
-        return self.save_image_best and (((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
+        return self.save_image_best and (
+                    ((self.current_generation % self.save_to_file_image) == 0) or not self.next_condition())
 
     def can_save_log(self):
         return self.save_log and ((self.current_generation % self.save_to_file_log) == 0) or not self.next_condition()
 
     def can_save_state(self):
-        return self.write_engine_state and ((self.current_generation % self.save_to_file_state) == 0) or not self.next_condition()
+        return self.write_engine_state and (
+                    (self.current_generation % self.save_to_file_state) == 0) or not self.next_condition()
 
     def restart(self, new_stop=10):
         self.last_stop = self.stop_value
@@ -1685,13 +1689,13 @@ class Engine:
         return tf.clip_by_value(final_tensor, clip_value_min=_codomain[0], clip_value_max=_codomain[1])
 
     def domain_mapping(self, tensor):
-        #print("Initial:\n", tensor.numpy())
+        # print("Initial:\n", tensor.numpy())
         final_tensor = tf.where(tf.math.is_nan(tensor), _domain[0], tensor)
-        #print("T1:\n", final_tensor.numpy())
+        # print("T1:\n", final_tensor.numpy())
         final_tensor = tf.clip_by_value(final_tensor, clip_value_min=tf.float32.min, clip_value_max=tf.float32.max)
-        #print("T2:\n", final_tensor.numpy())
+        # print("T2:\n", final_tensor.numpy())
         final_tensor = self.codomain_range(final_tensor)
-        #print("T3:\n", final_tensor.numpy())
+        # print("T3:\n", final_tensor.numpy())
 
         if self.do_polar_mask:
             final_tensor = tf.where(self.polar_mask == 1, final_tensor, self.polar_mask_value)
@@ -1703,7 +1707,7 @@ class Engine:
 
         return final_tensor
 
-    #def final_transform_domain(self, final_tensor):
+    # def final_transform_domain(self, final_tensor):
     #    return final_tensor
 
     def calculate_tensors(self, population):
@@ -1809,23 +1813,22 @@ class Engine:
         # convert expressions to trees
         return self.generate_pop_from_expr(strs)
 
-
     def initialize_population(self, max_depth=8, min_depth=-1, individuals=100, method='ramped half-and-half',
                               max_nodes=-1, read_from=None):
         start_init_population = time.time()
-        if read_from is None: # generate randomly
+        if read_from is None:  # generate randomly
             nodes_generated, population = self.generate_population(individuals, method, max_nodes, max_depth, min_depth)
         else:
 
             maxpopd = -1
-            if isinstance(read_from, str) and ".txt" in read_from: # read from file
+            if isinstance(read_from, str) and ".txt" in read_from:  # read from file
                 population, nodes_generated, maxpopd = self.generate_pop_from_file(read_from_file=read_from,
                                                                                    pop_size=self.population_size)
-            elif isinstance(read_from, list): # generate from list of strs
+            elif isinstance(read_from, list):  # generate from list of strs
 
                 population, nodes_generated, maxpopd = self.generate_pop_from_expr(read_from)
 
-            else: # give warning generate randomly
+            else:  # give warning generate randomly
                 print(bcolors.FAIL + "[ERROR]:\tCould not read from source: " + str(
                     read_from) + ", not a list of strinmgs and not a file, randomly generating population instead.",
                       bcolors.ENDC)
@@ -1929,6 +1932,13 @@ class Engine:
             children = [copy.deepcopy(node_p1), copy.deepcopy(node_p2), Node('scalar', [0.0], True)]
             return Node('lerp', children, False)
 
+    def deep_shallow_copy(self, ind):
+        # tensors already make a copy so technically copy.copy() is not needed
+        return new_individual(
+            copy.deepcopy(ind['tree']), fitness = ind['fitness'], depth = ind['depth'], nodes=ind['nodes'],
+            tensor=copy.copy(ind['tensor']), weights = ind['weights']
+        )
+
     def run(self, stop_value=10, start_from_last_pop=True):
 
         if not self.minimal_print:
@@ -1997,7 +2007,7 @@ class Engine:
 
                 self.population = population
                 self.best = best
-                self.best_overall = copy.deepcopy(self.best)
+                self.best_overall = self.deep_shallow_copy(self.best)
 
                 # Print initial population
                 if self.debug > 1:
@@ -2037,11 +2047,6 @@ class Engine:
 
         while self.condition():
 
-            #print("current gen", self.current_generation - 1)
-            #print("Best individual: ", self.best['tree'].get_str())
-            #print("Address at: ", self.best['tree'])
-            #print()
-
             # Update seed according to generation
             self.engine_rng = random.Random(self.experiment.seed)
 
@@ -2071,7 +2076,7 @@ class Engine:
                         member_depth = parent['depth']
                         member_nodes = parent['nodes']
 
-                    #print("retries: ", rcnt)
+                    # print("retries: ", rcnt)
 
                     retrie_cnt.append(rcnt)
                 else:
@@ -2106,7 +2111,6 @@ class Engine:
             #
             # https://www.researchgate.net/publication/220286086_Dynamic_limits_for_bloat_control_in_genetic_programming_and_a_review_of_past_and_current_bloat_theories
 
-
             if self.bloat_control == "off":
                 # for current_individual in range(self.population_size - self.elitism):
                 #    ind = temp_population[current_individual]
@@ -2120,11 +2124,12 @@ class Engine:
 
                 for current_individual in range(self.population_size - self.elitism):
                     ind = temp_population[current_individual]
-                    my_limit = get_largest_parent(ind, depth=depth_mode) if has_illegal_parents(ind) else self.dynamic_limit
+                    my_limit = get_largest_parent(ind, depth=depth_mode) if has_illegal_parents(
+                        ind) else self.dynamic_limit
 
                     sizeind = ind['depth'] if depth_mode else ind['nodes']
 
-                    if self.min_overall_size <= sizeind <= self.max_overall_size: # verify overall min and max sizes
+                    if self.min_overall_size <= sizeind <= self.max_overall_size:  # verify overall min and max sizes
                         fitnessind = ind['fitness']
 
                         if sizeind <= my_limit:
@@ -2155,12 +2160,12 @@ class Engine:
                             else:
                                 self.dynamic_limit = sizeind
 
-                    #print("my limit: ", my_limit, "ind dep", ind['depth'], "is legal", ind['valid'])
-                    #print("dynamic limit: ", self.dynamic_limit)
+                    # print("my limit: ", my_limit, "ind dep", ind['depth'], "is legal", ind['valid'])
+                    # print("dynamic limit: ", self.dynamic_limit)
 
                 if self.lock_dynamic_limit: self.dynamic_limit = temp_limit
 
-                #print("dynamic limit: ", self.dynamic_limit)
+                # print("dynamic limit: ", self.dynamic_limit)
 
                 # build new_pop
                 illegals = 0
@@ -2182,9 +2187,9 @@ class Engine:
             self.population = new_population
 
             # update best gen and overall
-            self.best = copy.deepcopy(self.get_n_best_from_pop(population=self.population, n=1)[0])
+            self.best = self.get_n_best_from_pop(population=self.population, n=1)[0]
             if self.condition_overall(self.best['fitness']):
-                self.best_overall = copy.deepcopy(self.best)
+                self.best_overall = self.deep_shallow_copy(self.best)
 
             # save pop and bests
             self.save_pop_and_bests(population=self.population)
@@ -2241,8 +2246,8 @@ class Engine:
         if self.can_save_image_best():
             # Save Best Image
             fn = self.experiment.working_directory + str(self.current_generation).zfill(5)
-            save_image(self.best_overall['tensor'], 0, fn, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
-
+            save_image(self.best_overall['tensor'], 0, fn, self.target_dims, BGR=self.do_bgr,
+                       extension=self.image_extension)
 
         # print final stats
         if self.debug > 0:
@@ -2282,15 +2287,14 @@ class Engine:
         if random_n2 < self.mutation_rate:
             indiv_temp = self.mutation(parent['tree'])
 
-        #if indiv_temp
+        # if indiv_temp
         # print("mut")
-        #if random_n1 >= self.crossover_rate and random_n2 >= self.crossover_rate:
-        #indiv_temp = parent['tree']
+        # if random_n1 >= self.crossover_rate and random_n2 >= self.crossover_rate:
+        # indiv_temp = parent['tree']
         # print("repro")
-        #print("Indiv temp dep: ", indiv_temp.get_depth(), " with str: ", indiv_temp.get_str())
+        # print("Indiv temp dep: ", indiv_temp.get_depth(), " with str: ", indiv_temp.get_str())
 
         return indiv_temp, parent, plist
-
 
     def get_n_best_from_pop(self, population, n):
         if self.objective == 'minimizing':
@@ -2298,7 +2302,6 @@ class Engine:
         else:
             elite = nlargest(n, population, key=itemgetter('fitness'))
         return elite
-
 
     def save_pop_and_bests(self, population):
         if self.can_save_image_best():
@@ -2314,7 +2317,6 @@ class Engine:
                     fn = self.experiment.cur_image_directory + "gen" + str(self.current_generation).zfill(5)
                     save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr,
                                extension=self.image_extension)
-
 
     def graph_statistics(self, extension=".pdf"):
 
@@ -2343,10 +2345,10 @@ class Engine:
                 if line_start <= lcnt < line_end:
                     avg_fit.append(float(row[1]))
                     std_fit.append(float(row[2]))
-                    best_fit.append(float(row[4])) # overall
+                    best_fit.append(float(row[4]))  # overall
                     avg_dep.append(float(row[5]))
                     std_dep.append(float(row[6]))
-                    best_dep.append(float(row[8])) # overall
+                    best_dep.append(float(row[8]))  # overall
                 lcnt += 1
 
         # showing best overall
@@ -2507,7 +2509,7 @@ class Function_Set:
             'if': [3, resolve_if_node],
             'len': [2, resolve_len_node],
             'lerp': [3, resolve_lerp_node],
-            #'lerpp': [3, resolve_lerp_node],
+            # 'lerpp': [3, resolve_lerp_node],
             'log': [1, resolve_log_node],
             'max': [2, resolve_max_node],
             'mdist': [2, resolve_mdist_node],
@@ -2615,7 +2617,7 @@ class Terminal_Set:
         self.engref = engref
         self.dimension = resolution[effective_dim] if (effective_dim < len(resolution)) else 1
 
-        #if engine ref is None then we also did not define the domain and codomain so make an empty set
+        # if engine ref is None then we also did not define the domain and codomain so make an empty set
         if engref is not None:
             self.set = self.make_term_variables(0, effective_dim, resolution, function_ptr_to_var_node)  # x, y
             if effective_dim >= 2 and self.engref.polar_coordinates:
