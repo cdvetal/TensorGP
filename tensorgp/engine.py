@@ -2299,16 +2299,9 @@ class Engine:
             else:
                 mask_expr = "scalar(" + str(_codomain[0]) + ")"
 
-            print("This is masked expr: " + mask_expr)
-
             _, tt = str_to_tree(mask_expr, self.terminal.set, constrain_domain=False)
             with tf.device(self.device):
-                #self.polar_mask_value = tf.cast(
-                #    get_final_transform(tt.get_tensor(self), _final_transform_delta, _final_transform[0]),
-                #    tf.float32)  # cast to an int tensor
-
                 self.polar_mask_value = tf.cast(tt.get_tensor(self), tf.float32)
-            print("This is the polar mask value: " + str(self.polar_mask_value))
 
     def selection(self):
         parent = self.tournament_selection()
