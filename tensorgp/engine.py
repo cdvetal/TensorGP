@@ -1262,9 +1262,10 @@ class Engine:
                 _final_transform = [float(final_transform[0]), float(final_transform[1])]
             _final_transform_delta = _final_transform[1] - _final_transform[0]
 
+        # Polar coordinate stuff
         self.polar_coordinates = polar_coordinates
         self.do_polar_mask = do_polar_mask
-        self.polar_mask_value = _codomain[0] if polar_mask_value is None else polar_mask_value
+        self.polar_mask_value = polar_mask_value
         self.polar_mask = tf.ones(self.target_dims, dtype=tf.float32)
 
         if const_range is None or len(const_range) < 1:
@@ -1296,6 +1297,8 @@ class Engine:
 
         # print("x tensor: ", self.terminal.set['x'])
         # print("y tensor: ", self.terminal.set['y'])
+        self.set_polar_mask_value()
+
 
         if isinstance(target, str):
             # target = 'mult(scalar(127.5), ' + target + ')'
@@ -1426,6 +1429,11 @@ class Engine:
             summary_str += "Domain Mapping: " + str(self.domain_mode) + "\n"
             summary_str += "Do final transform: " + str(self.do_final_transform) + "\n"
             summary_str += "Final transform: " + str(_final_transform) + "\n"
+            summary_str += "Polar coordinates" + str(self.polar_coordinates) + "\n"
+            if self.polar_coordinates:
+                summary_str += "Mask polar coordinates" + str(self.do_polar_mask) + "\n"
+                summary_str += "Polar mask" + str(self.polar_mask) + "\n"
+                summary_str += "Polar mask value" + str(self.polar_mask_value) + "\n"
 
         if terminals or force_print:
             summary_str += "\n============ Terminal set Information ============\n"
@@ -1438,12 +1446,13 @@ class Engine:
         if bloat or force_print:
             summary_str += "\n============ Bloat control Information ============\n"
             summary_str += "Bloat control: " + self.bloat_control + "\n"
-            summary_str += "Bloat mode: " + self.bloat_mode + "\n"
-            summary_str += "Dynamic limit: " + str(self.dynamic_limit) + "\n"
-            summary_str += "Initial dynamic limit" + str(self.initial_dynamic_limit) + "\n"
-            summary_str += "Overall lower limit: " + str(self.min_overall_size) + "\n"
-            summary_str += "Overall upper limit: " + str(self.max_overall_size) + "\n"
-            summary_str += "Dynamic lymit locked: " + str(self.lock_dynamic_limit) + "\n"
+            if self.bloat_control != 'off':
+                summary_str += "Bloat mode: " + self.bloat_mode + "\n"
+                summary_str += "Dynamic limit: " + str(self.dynamic_limit) + "\n"
+                summary_str += "Initial dynamic limit: " + str(self.initial_dynamic_limit) + "\n"
+                summary_str += "Overall lower limit: " + str(self.min_overall_size) + "\n"
+                summary_str += "Overall upper limit: " + str(self.max_overall_size) + "\n"
+                summary_str += "Dynamic limit locked: " + str(self.lock_dynamic_limit) + "\n"
 
         if population or force_print:
             summary_str += "\n============ Population Information ============\n"
@@ -2270,6 +2279,37 @@ class Engine:
         tensors = [p['tensor'] for p in self.population]
         return self.data, tensors
 
+    def set_polar_mask_value(self):
+        if self.do_polar_mask:
+            polar_mask_value = self.polar_mask_value
+            if isinstance(polar_mask_value, float):
+                mask_expr = "scalar(" + str(clamp(_codomain[0], polar_mask_value, _codomain[1])) + ")"
+            elif isinstance(polar_mask_value, int):
+                mask_expr = "scalar(" + str(clamp(_codomain[0], float(polar_mask_value), _codomain[1])) + ")"
+            elif isinstance(polar_mask_value, list):
+                mask_expr = "scalar("
+                mask_args = min(self.dimensionality, len(polar_mask_value))
+                for i in range(mask_args):
+                    mask_expr += str(polar_mask_value[i])
+                    if i < mask_args - 1:
+                        mask_expr += ","
+                mask_expr += ")"
+            elif isinstance(polar_mask_value, str):
+                mask_expr = polar_mask_value
+            else:
+                mask_expr = "scalar(" + str(_codomain[0]) + ")"
+
+            print("This is masked expr: " + mask_expr)
+
+            _, tt = str_to_tree(mask_expr, self.terminal.set, constrain_domain=False)
+            with tf.device(self.device):
+                #self.polar_mask_value = tf.cast(
+                #    get_final_transform(tt.get_tensor(self), _final_transform_delta, _final_transform[0]),
+                #    tf.float32)  # cast to an int tensor
+
+                self.polar_mask_value = tf.cast(tt.get_tensor(self), tf.float32)
+            print("This is the polar mask value: " + str(self.polar_mask_value))
+
     def selection(self):
         parent = self.tournament_selection()
         plist = []
@@ -2618,7 +2658,7 @@ class Terminal_Set:
         self.dimension = resolution[effective_dim] if (effective_dim < len(resolution)) else 1
 
         # if engine ref is None then we also did not define the domain and codomain so make an empty set
-        if engref is not None:
+        if self.engref is not None:
             self.set = self.make_term_variables(0, effective_dim, resolution, function_ptr_to_var_node)  # x, y
             if effective_dim >= 2 and self.engref.polar_coordinates:
                 x = self.set['x']
