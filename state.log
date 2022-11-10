@@ -1,0 +1,103 @@
+[state]
+# Comments start with '#'
+# Check the README for documentation on the arguments: https://github.com/AwardOfSky/TensorGP
+
+############# General Information #############
+_current_generation = 6
+seed = 2025
+population_size = 13
+tournament_size = 3
+elitism = 1
+mutation_rate = 0.1
+crossover_rate = 0.9
+method = ramped half-and-half
+stop_criteria = generation
+stop_value = 5
+objective = maximizing
+target_dims = [256, 256, 3]
+device = /gpu:0
+
+############# Tree Information #############
+min_init_depth = -1
+max_init_depth = 10
+min_tree_depth = -1
+max_tree_depth = 10
+min_subtree_dep = -1
+max_subtree_dep = 10
+max_nodes = -1
+const_range = [-1.0, 1.0]
+
+############# Probabilities Information #############
+koza_rule_prob = 0.9
+terminal_prob = 0.2
+scalar_prob = 0.55
+uniform_scalar_prob = 0.5
+_mutation_funcs = [subtree_mutation, point_mutation, delete_mutation, insert_mutation]
+mutation_probs = [0.0, 0.25, 0.5, 0.75]
+replace_prob = 0.05
+
+############# Inputs/Outputs/Mapping Information #############
+domain = [-1.0, 1.0]
+codomain = [-1.0, 1.0]
+domain_mode = clip
+do_final_transform = True
+final_transform = [0.0, 255.0]
+polar_coordinates = True
+do_polar_mask = True
+polar_mask_value = scalar(1.0, -1.0, 1.0)
+
+############# Terminal set Information #############
+
+############# Function set Information #############
+operators = {abs, add, and, clip, cos, div, exp, frac, if, len, lerp, log, max, mdist, min, mod, mult, neg, or, pow, sign, sin, sqrt, sstep, sstepp, step, sub, tan, warp, xor}
+
+############# Bloat control Information #############
+bloat_control = off
+
+############# Saves Information #############
+save_graphics = True
+show_graphics = False
+graphic_extension = .pdf
+save_to_file = 1
+
+############# Images Information #############
+save_image_pop = True
+save_image_best = True
+save_to_file_image = 1
+do_bgr = False
+image_extension = .png
+
+############# Logs Information #############
+save_log = True
+save_to_file_log = 1
+write_engine_state = True
+save_to_file_state = 1
+save_bests = True
+save_bests_overall = True
+
+############# Timers Information #############
+last_init_time = 0.06077384948730469
+last_fitness_time = 2.358476400375366
+last_tensor_time = 1.8252129554748535
+last_engine_time = 6.518248796463013
+_last_engine_time = 1668116549.815489
+
+############# Extra Information #############
+debug = 0
+immigration = inf
+max_retries = 5
+effective_dims = 2
+initial_test_device = True
+replace_mode = dynamic_arities
+target = None
+minimal_print = False
+tf_type = <dtype: 'float32'>
+_save_state = 2
+
+############# Paths Information #############
+run_dir_path = None
+pop_file_path = None
+stats_file_path = None
+graphics_file_path = None
+read_init_pop_from_source = None
+exp_prefix = "polar_tests"
