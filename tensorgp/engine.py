@@ -462,7 +462,7 @@ def save_image(tensor, index, fn, dims, sufix='', extension=".png", BGR=False): 
             print("Attempting to save tensor with rank ", len(dims),
                   " as an image, must be rank 2 (grayscale) or 3 (RGB).")
     except ValueError:
-        print("[ERROR]:\tWrong rank in tensor")
+        print(bcolors.FAIL + "[ERROR]:\tWrong rank in tensor" + bcolors.ENDC)
     return path
 
 
@@ -525,14 +525,14 @@ def set_device(device='/gpu:0', debug_lvl=1):
                     print(bcolors.OKGREEN + "Device " + device + " successfully tested, using this device. ",
                           bcolors.ENDC)
                 else:
-                    print(bcolors.FAIL + "Device " + device + " not working.", bcolors.ENDC)
+                    print(bcolors.FAIL + "Device " + device + " not working." + bcolors.ENDC)
     except RuntimeError or ValueError:
         if cuda_build and gpus_available > 0:
             result_device = '/gpu:0'
-            print(bcolors.WARNING + "[WARNING]:\tCould not find the specified device, reverting to GPU.", bcolors.ENDC)
+            print(bcolors.WARNING + "[WARNING]:\tCould not find the specified device, reverting to GPU." + bcolors.ENDC)
         else:
             result_device = '/cpu:0'
-            print(bcolors.WARNING + "[WARNING]:\tCould not find the specified device, reverting to CPU.", bcolors.ENDC)
+            print(bcolors.WARNING + "[WARNING]:\tCould not find the specified device, reverting to CPU." + bcolors.ENDC)
     return result_device
 
 
@@ -558,12 +558,6 @@ def load_engine(fitness_func = None, var_func = None, mutation_funcs = None, pop
     #json_object = json.dumps(conf_dict, indent=4)
     #print(json_object)
 
-    #except (ValueError, SyntaxError):
-    #    kwargs[k] = v
-    #except:
-    #    print("[ERROR]:\tCould not read argument with key, value: " + str(k) + ", " + str(v) + ".")
-    #    raise
-
     kwargs = {}
     for k, v in conf_dict.items():
         if k[0] != '_':
@@ -578,7 +572,7 @@ def load_engine(fitness_func = None, var_func = None, mutation_funcs = None, pop
                 except (ValueError, SyntaxError):
                     kwargs[k] = v
                 except:
-                    print("[ERROR]:\tCould not read argument with key, value: " + str(k) + ", " + str(v) + ".")
+                    print(bcolors.FAIL + "[ERROR]:\tCould not read argument with key, value: " + str(k) + ", " + str(v) + "." + bcolors.END)
                     raise
 
     if pop_source is None:
@@ -593,8 +587,8 @@ def load_engine(fitness_func = None, var_func = None, mutation_funcs = None, pop
     #json_object = json.dumps(kwargs, indent=4, default=serialize_sets)
     #print(json_object)
 
-    print("Loading engine with timestamp: " +
-          datetime.datetime.fromtimestamp(int(float(conf_dict['_last_engine_time']))).strftime('%Y-%m-%d %H:%M:%S'))
+    print(bcolors.WARNING + "Loading engine with timestamp: " +
+          datetime.datetime.fromtimestamp(int(float(conf_dict['_last_engine_time']))).strftime('%Y-%m-%d %H:%M:%S') + bcolors.ENDC)
     engine = Engine(fitness_func = fitness_func,
                     var_func=var_func,
                     mutation_funcs = mutation_funcs,
@@ -622,14 +616,14 @@ class Experiment:
         except OSError as error:
             if error is FileExistsError:
                 print(bcolors.WARNING + "[WARNING]:\tExperiment directory of generation " + str(
-                    generation) + " already exists, saving files to current directory.", bcolors.ENDC)
+                    generation) + " already exists, saving files to current directory." + bcolors.ENDC)
             elif error is PermissionError:
                 print(bcolors.WARNING + "[WARNING]:\tPermission denied while creating directory of generation: " + str(
-                    generation) + ".", bcolors.ENDC)
+                    generation) + "." + bcolors.ENDC)
             else:
                 print(bcolors.WARNING + "[WARNING]:\tOSError while creating directory of generation: " + str(
-                    generation) + ".", bcolors.ENDC)
-            print(bcolors.WARNING + "[WARNING]:\tReverting current directory to general image directory.", bcolors.ENDC)
+                    generation) + "." + bcolors.ENDC)
+            print(bcolors.WARNING + "[WARNING]:\tReverting current directory to general image directory." + bcolors.ENDC)
             self.cur_image_directory = self.image_directory
 
     def set_experiment_ID(self):
@@ -678,10 +672,10 @@ class Experiment:
                     bcolors.WARNING + "[WARNING]:\tExperiment directory already exists, saving files to current directory.",
                     bcolors.ENDC)
             elif error is PermissionError:
-                print(bcolors.WARNING + "[WARNING]:\tPermission denied while creating directory", bcolors.ENDC)
+                print(bcolors.WARNING + "[WARNING]:\tPermission denied while creating directory" + bcolors.ENDC)
             else:
-                print(bcolors.WARNING + "[WARNING]:\tOSError while creating directory", bcolors.ENDC)
-            print(bcolors.WARNING + "[WARNING]:\tFilename: " + self.working_directory, bcolors.ENDC)
+                print(bcolors.WARNING + "[WARNING]:\tOSError while creating directory" + bcolors.ENDC)
+            print(bcolors.WARNING + "[WARNING]:\tFilename: " + self.working_directory + bcolors.ENDC)
             self.working_directory = os.getcwd()
 
         # New Filesystem
@@ -712,7 +706,7 @@ class Experiment:
                 print(bcolors.WARNING + "[WARNING]:\tPermission denied while creating experiment subdirectories.",
                       bcolors.ENDC)
             else:
-                print(bcolors.WARNING + "[WARNING]:\tOSError while creating experiment subdirectories.", bcolors.ENDC)
+                print(bcolors.WARNING + "[WARNING]:\tOSError while creating experiment subdirectories." + bcolors.ENDC)
 
         overall_extension = "csv"
         overall_suffix = str(self.filename) + "." + overall_extension
@@ -810,7 +804,7 @@ class Engine:
                         parent_1_chosen_node.children[self.engine_rng.choice(possible_children)])
                 else:
                     if len(possible_children) <= koza_child:
-                        print("[ERROR]: Out of bondaries for second parent 1.")
+                        print(bcolors.FAIL + "[ERROR]: Out of bondaries for second parent 1." + bcolors.ENC)
                         parent_2_child = clamp(0, koza_child, len(possible_children) - 1)
                     crossover_node = copy.deepcopy(parent_1_chosen_node.children[koza_child])
             else:
@@ -825,7 +819,7 @@ class Engine:
                 crossover_node = copy.deepcopy(parent_1_chosen_node)
 
         if crossover_node is None:
-            print("[ERROR]: Did not select a crossover node.")
+            print(bcolors.FAIL + "[ERROR]: Did not select a crossover node." + bcolors.ENC)
         new_ind = copy.deepcopy(parent_2)
 
         if parent_2_node is None:
@@ -850,7 +844,7 @@ class Engine:
                     parent_2_chosen_node.children[rand_child] = crossover_node
                 else:
                     if len_parent_2_children <= parent_2_child:
-                        print("[ERROR]: Out of bondaries for second parent 2.")
+                        print(bcolors.FAIL + "[ERROR]: Out of bondaries for second parent 2." + bcolors.ENC)
                         parent_2_child = clamp(0, parent_2_child, len_parent_2_children - 1)
                     parent_2_chosen_node.children[parent_2_child] = crossover_node
             else:
@@ -878,7 +872,7 @@ class Engine:
             crossover_node = copy.deepcopy(self.engine_rng.choice(list(parent_1_terminals.elements())))
 
         if crossover_node is None:
-            print("[ERROR]: Did not select a crossover node.")
+            print(bcolors.FAIL + "[ERROR]: Did not select a crossover node." + bcolors.ENC)
         new_ind = copy.deepcopy(parent_2)
         parent_2_candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=False, add_root=True)
 
@@ -1199,9 +1193,9 @@ class Engine:
         self.fitness_func = fitness_func
         if debug > 0:
             if self.fitness_func is None:
-                print(bcolors.WARNING + "[WARNING]:\tFitness function not defined!", bcolors.ENDC)
+                print(bcolors.WARNING + "[WARNING]:\tFitness function not defined!" + bcolors.ENDC)
             elif not callable(self.fitness_func):
-                print(bcolors.WARNING + "[WARNING]:\tFitness function is not callable!", bcolors.ENDC)
+                print(bcolors.WARNING + "[WARNING]:\tFitness function is not callable!" + bcolors.ENDC)
 
         # TODO: read configuration if present
 
@@ -1415,7 +1409,7 @@ class Engine:
         # update timers
         self.elapsed_init_time += time.time() - start_init
         if self.debug > 0: print("Elapsed init time: ", self.elapsed_init_time)
-        print(bcolors.OKGREEN + "Engine seed:" + str(self.experiment.seed), bcolors.ENDC)
+        print(bcolors.OKGREEN + "Engine seed:" + str(self.experiment.seed) + bcolors.ENDC)
         self.update_engine_time()
 
         self.population = []
@@ -1794,7 +1788,7 @@ class Engine:
 
         if len(population) != individuals:
             print(bcolors.FAIL + "[ERROR]:\tWrong number of individuals generated: " + str(len(population)) + "/" + str(
-                individuals), bcolors.ENDC)
+                individuals) + bcolors.ENDC)
 
         return pop_nodes, population
 
@@ -1930,7 +1924,7 @@ class Engine:
             if cnt < pop_size < float('inf'):
                 print(
                     bcolors.WARNING + "[WARNING]:\tCould only read " + str(cnt) + " expressions from population file " +
-                    str(read_from_file) + " instead of specified population size of " + str(pop_size), bcolors.ENDC)
+                    str(read_from_file) + " instead of specified population size of " + str(pop_size) + bcolors.ENDC)
 
         # convert expressions to trees
         return self.generate_pop_from_expr(strs)
@@ -2036,7 +2030,7 @@ class Engine:
             tensors, time_taken = self.calculate_tensors(pop)
         else:
             print(bcolors.FAIL + "[ERROR]:\tTo generate images from a population please enter either"
-                                 " a file or a list with the corresponding expressions.", bcolors.ENDC)
+                                 " a file or a list with the corresponding expressions." + bcolors.ENDC)
             return
         index = 0
         for p in pop:
@@ -2374,10 +2368,10 @@ class Engine:
             print("Elapsed Tensor Time : \t" + str(round(self.elapsed_tensor_time, places_to_round)) + " sec.")
             print("Elapsed Fitness Time:\t" + str(round(self.elapsed_fitness_time, places_to_round)) + " sec.")
             print("\nBest individual (generation):\n" + bcolors.OKCYAN + self.best['tree'].get_str())
-            print("\nBest individual (overall):\n" + bcolors.OKCYAN + self.best_overall['tree'].get_str(), bcolors.ENDC)
+            print("\nBest individual (overall):\n" + bcolors.OKCYAN + self.best_overall['tree'].get_str() + bcolors.ENDC)
 
         if self.save_graphics: self.graph_statistics(extension=self.graphic_extension)
-        if not self.minimal_print: print(bcolors.BOLD + bcolors.OKGREEN + "=" * 84, "\n\n", bcolors.ENDC)
+        if not self.minimal_print: print(bcolors.BOLD + bcolors.OKGREEN + "=" * 84, "\n\n" + bcolors.ENDC)
 
         self.save_state += 1
         tensors = [p['tensor'] for p in self.population]
@@ -2700,7 +2694,7 @@ class Function_Set:
                       bcolors.ENDC)
             if operator_name in self.operators_def and self.debug > 1:
                 print(bcolors.WARNING + "[WARNING]:\tOverriding operator", operator_name,
-                      ", which is an engine defined operator. This is not recommended.", bcolors.ENDC)
+                      ", which is an engine defined operator. This is not recommended." + bcolors.ENDC)
             self.remove_from_set(operator_name)
 
         self.set[operator_name] = [number_of_args, function_pointer]
@@ -2715,7 +2709,7 @@ class Function_Set:
         else:
             if operator_name in self.operators_def and self.debug > 0:
                 print(bcolors.WARNING + "[WARNING]:\tRemoving operator", operator_name,
-                      ", which is an engine defined operator. I hope you know what you are doing.", bcolors.ENDC)
+                      ", which is an engine defined operator. I hope you know what you are doing." + bcolors.ENDC)
             if operator_name != 'mult':  # we won't actually remove some operators because we might need them for scaling in the begginning
                 ari = self.set[operator_name][0]
                 del self.set[operator_name]
