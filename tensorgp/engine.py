@@ -1988,6 +1988,10 @@ class Engine:
         if self.can_save_log():
             genstr = "gen" + str(self.current_generation).zfill(5)
             fn = self.experiment.generations_directory if fp is None else fp
+            # write engine summary
+            engine.summary(force_print=True, log_format=True, write_file=True, file_path=self.experiment.working_directory, file_name = 'state.log')
+            
+            # write information of generation
             fn += genstr + ".csv"
             with open(fn, mode='w', newline='') as file:
                 fwriter = csv.writer(file, delimiter=',')
