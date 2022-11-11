@@ -131,18 +131,21 @@ Again, refer to the Parameterization section for a full list of parameters.
 
 ### Bloat control
 
-TensorGP implements mechanisms for bloat control. These are off by default: ```bloat_control = 'off'```. However there are three more modes:
+TensorGP implements mechanisms for bloat control. These are off by default: ```bloat_control = 'off'```.
+This is achieved with the help of a ```dynamic_limit``` which limits the size of the individuals in the population. This limit can increase and even decrease according to the types of  ```bloat_control``` being used:
 
-- **off**        -  ```min_tree_depth``` < depth < ```max_tree_depth```
+- **off**        -  No ```dynamic_limit```.  ```min_tree_depth``` < depth < ```max_tree_depth```
 - **weak**       - ```dynamic_limit``` can only increase (until ```max_overall_size```)
 - **heavy**      - ```dynamic_limit``` can increase (until ```max_overall_size```) and decrease (until initial ```dynamic_limit``` value)
 - **very heavy** - ```dynamic_limit``` can increase (until ```max_overall_size```) and decrease (until ```min_overall_size```)
- 
+
  These control mechanisms can function both on depth and size (number of nodes of the tree), according to 
  the ```bloat_mode``` argument.
  
 - **depth** - ```dynamic_limit``` refers to tree depth
 - **size** - ```dynamic_limit``` refers to number of nodes in a tree
+
+**Some other notes**: if bloat control ```bloat_control != 'off'``` and the variables `min_overall_size` and `max_overall_size` are not defined by the user, they will keep the values of `min_init_depth` and `max_init_depth`, respectively.
 
 Example:
 
