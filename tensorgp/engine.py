@@ -2048,6 +2048,8 @@ class Engine:
                 fwriter = csv.writer(file, delimiter=',')
                 ind = 0
                 for p in self.population:
+                    if ind == 0:
+                        file.write("individual number, individual name, fitness, depth, number nodes, expression\n")
                     fwriter.writerow(
                         [str(ind), genstr + "_indiv_" + str(ind).zfill(5), p['fitness'], p['depth'], p['nodes'],
                          p['tree'].get_str()])
@@ -2590,8 +2592,6 @@ class Engine:
                         "depth avg, depth std, depth generational best, depth overall best," \
                         "node avg, node std, node generational best, node overall best," \
                         "generation time, fitness time, tensor time\n")
-                print("D: ", d)
-                print("Len d: ", len(d))
                 fwriter.writerow(d)
                 ind += 1
 
