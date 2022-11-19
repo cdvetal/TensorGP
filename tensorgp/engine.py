@@ -1317,7 +1317,8 @@ class Engine:
         global _tf_type
 
         # check for tf data type validity
-        self.tf_type = tf_type if (hasattr(tf_type, "__module__") and (('tensorflow' and 'dtypes') in tf_type.__module__.split("."))) else tf.float32
+        self.tf_type = tf_type if (hasattr(tf_type, "__module__") and (
+                    ('tensorflow' and 'dtypes') in tf_type.__module__.split("."))) else tf.float32
         _tf_type = self.tf_type
 
         # set domain
@@ -2407,7 +2408,7 @@ class Engine:
             # Save Best Image
             fn = self.experiment.working_directory + str(self.current_generation).zfill(5)
             save_image(self.best_overall['tensor'], 0, fn, self.target_dims, BGR=self.do_bgr,
-                       extension=self.image_extension, sufix="best_overall")
+                       extension=self.image_extension, sufix="_best_overall")
 
         # print final stats
         if self.debug > 0:
@@ -2578,23 +2579,28 @@ class Engine:
     def write_overall_to_csv(self, data):
         # evolutionary stats across generations
         fn = (
-                    self.experiment.working_directory + "evolution_" + self.experiment.filename + ".csv") if self.experiment.overall_fp is None else self.experiment.overall_fp
+                self.experiment.working_directory + "evolution_" + self.experiment.filename + ".csv") if self.experiment.overall_fp is None else self.experiment.overall_fp
         with open(fn, mode='a', newline='') as file:
             fwriter = csv.writer(file, delimiter=',')
             ind = 0
             for d in data:
                 if ind == 0 and self.save_state == 0:
                     file.write(
-                        "[generation, fitness avg, fitness std, fitness generational best, fitness overall best, depth avg, depth std, depth generational best, depth overall best, generation time, fitness time, tensor time]\n")
+                        "generation, fitness avg, fitness std, fitness generational best, fitness overall best," \
+                        "depth avg, depth std, depth generational best, depth overall best," \
+                        "node avg, node std, node generational best, node overall best," \
+                        "generation time, fitness time, tensor time\n")
+                print("D: ", d)
+                print("Len d: ", len(d))
                 fwriter.writerow(d)
                 ind += 1
 
         fn = (
-                    self.experiment.working_directory + "timings_" + self.experiment.filename + ".csv") if self.experiment.timings_fp is None else self.experiment.timings_fp
+                self.experiment.working_directory + "timings_" + self.experiment.filename + ".csv") if self.experiment.timings_fp is None else self.experiment.timings_fp
         with open(fn, mode='a', newline='') as file:
             fwriter = csv.writer(file, delimiter=',')
             if self.save_state == 0:
-                file.write("[resolution, seed, initialization time, tensor time, fitness time, total, engine time]\n")
+                file.write("resolution, seed, initialization time, tensor time, fitness time, total, engine time\n")
             fwriter.writerow([self.target_dims[0], self.experiment.seed, self.elapsed_init_time,
                               self.elapsed_tensor_time, self.elapsed_fitness_time, self.elapsed_engine_time])
 
