@@ -640,6 +640,7 @@ class Experiment:
         summary_str += "Image dir: " + str(self.image_directory) + "\n"
         summary_str += "Current image dir: " + str(self.cur_image_directory) + "\n"
         summary_str += "Bests dir: " + str(self.bests_directory) + "\n"
+        summary_str += "Bests dir: " + str(self.best_overall_directory) + "\n"
         summary_str += "All dir: " + str(self.all_directory) + "\n"
         summary_str += "Immigration dir: " + str(self.immigration_directory) + "\n"
         summary_str += "Logging dir: " + str(self.logging_directory) + "\n"
@@ -658,7 +659,8 @@ class Experiment:
                  immigration=None,
                  seed=None,
                  wd=None,
-                 addon=None):
+                 addon=None,
+                 best_overall_dir=False):
 
         self.ID = self.set_experiment_ID()
         self.seed = self.ID if (seed is None) else seed
@@ -686,6 +688,8 @@ class Experiment:
         self.image_directory = self.working_directory + "images" + _tgp_delimiter
         self.cur_image_directory = self.image_directory
         self.bests_directory = self.image_directory + "bests" + _tgp_delimiter
+        self.best_overall_directory = self.working_directory if not best_overall_dir else (self.image_directory + "bests_overall" + _tgp_delimiter) # for many runs, e.g. tgpgan
+
         self.all_directory = self.image_directory + "all" + _tgp_delimiter
         # TODO: transform immigration into archive
         self.immigration_directory = (
@@ -696,6 +700,7 @@ class Experiment:
         try:
             os.makedirs(self.current_directory, exist_ok=True)
             os.makedirs(self.image_directory, exist_ok=True)
+            if best_overall_dir: os.makedirs(self.best_overall_directory, exist_ok=True)
             os.makedirs(self.cur_image_directory, exist_ok=True)
             os.makedirs(self.bests_directory, exist_ok=True)
             os.makedirs(self.all_directory, exist_ok=True)
@@ -1094,94 +1099,95 @@ class Engine:
     ### needs to be passed
     def __init__(self,
                  fitness_func=None,  ###
-                 population_size=100,  #
-                 tournament_size=3,  #
-                 mutation_rate=0.15,  #
-                 mutation_funcs=None,  #
-                 mutation_probs=None,  #
-                 crossover_rate=0.9,  #
-                 elitism=1,  #
-                 min_tree_depth=-1,  #
-                 max_tree_depth=8,  #
-                 max_init_depth=None,  #
-                 min_init_depth=None,  #
-                 max_subtree_dep=None,  #
-                 min_subtree_dep=None,  #
-                 method='ramped half-and-half',  #
-                 terminal_prob=0.2,  #
-                 scalar_prob=0.55,  #
-                 uniform_scalar_prob=0.5,  #
-                 max_retries=5,  #
-                 koza_rule_prob=0.9,  #
-                 stop_criteria='generation',  #
-                 stop_value=10,  #
-                 objective='minimizing',  #
-                 domain=None,  #
-                 codomain=None,  #
-                 final_transform=None,  #
-                 do_final_transform=False,  #
+                 population_size=100,
+                 tournament_size=3,
+                 mutation_rate=0.15,
+                 mutation_funcs=None,
+                 mutation_probs=None,
+                 crossover_rate=0.9,
+                 elitism=1,
+                 min_tree_depth=-1,
+                 max_tree_depth=8,
+                 max_init_depth=None,
+                 min_init_depth=None,
+                 max_subtree_dep=None,
+                 min_subtree_dep=None,
+                 method='ramped half-and-half',
+                 terminal_prob=0.2,
+                 scalar_prob=0.55,
+                 uniform_scalar_prob=0.5,
+                 max_retries=5,
+                 koza_rule_prob=0.9,
+                 stop_criteria='generation',
+                 stop_value=10,
+                 objective='minimizing',
+                 domain=None,
+                 codomain=None,
+                 final_transform=None,
+                 do_final_transform=False,
 
-                 bloat_control='off',  #
-                 bloat_mode='depth',  #
-                 dynamic_limit=8,  #
-                 min_overall_size=None,  #
-                 max_overall_size=None,  #
-                 lock_dynamic_limit=False,  #
+                 bloat_control='off',
+                 bloat_mode='depth',
+                 dynamic_limit=8,
+                 min_overall_size=None,
+                 max_overall_size=None,
+                 lock_dynamic_limit=False,
 
-                 domain_mode='clip',  #
-                 replace_mode='dynamic_arities',  #
-                 replace_prob=0.05,  #
-                 const_range=None,  #
-                 effective_dims=None,  #
-                 operators=None,  #
+                 domain_mode='clip',
+                 replace_mode='dynamic_arities',
+                 replace_prob=0.05,
+                 const_range=None,
+                 effective_dims=None,
+                 operators=None,
                  function_set=None,  ###
                  terminal_set=None,  ###
-                 immigration=float('inf'),  #
-                 target_dims=None,  #
-                 target=None,  #
-                 max_nodes=-1,  #
-                 seed=None,  #
-                 debug=0,  #
-                 save_graphics=True,  #
-                 show_graphics=True,  #
-                 save_image_best=True,  #
-                 save_image_pop=True,  #
-                 save_to_file=10,  #
-                 save_to_file_image=None,  #
-                 save_to_file_log=None,  #
-                 save_to_file_state=None,  #
-                 save_bests=True,  #
-                 save_bests_overall=True,  #
+                 immigration=float('inf'),
+                 target_dims=None,
+                 target=None,
+                 max_nodes=-1,
+                 seed=None,
+                 debug=0,
+                 save_graphics=True,
+                 show_graphics=True,
+                 save_image_best=True,
+                 save_image_pop=True,
+                 save_to_file=10,
+                 save_to_file_image=None,
+                 save_to_file_log=None,
+                 save_to_file_state=None,
+                 save_bests=True,
+                 save_bests_overall=True,
 
-                 exp_prefix='',  #
-                 device='/cpu:0',  #
-                 do_bgr=False,  #
+                 exp_prefix='',
+                 device='/cpu:0',
+                 do_bgr=False,
 
-                 polar_coordinates=False,  #
-                 do_polar_mask=True,  #
-                 polar_mask_value=None,  #
+                 polar_coordinates=False,
+                 do_polar_mask=True,
+                 polar_mask_value=None,
 
-                 image_extension=None,  #
-                 graphic_extension=None,  #
-                 minimal_print=False,  #
+                 image_extension=None,
+                 graphic_extension=None,
+                 minimal_print=False,
 
-                 save_log=True,  #
-                 write_engine_state=True,  #
+                 save_log=True,
+                 write_engine_state=True,
 
-                 last_init_time=None,  #
-                 last_fitness_time=None,  #
-                 last_tensor_time=None,  #
-                 last_engine_time=None,  #
+                 last_init_time=None,
+                 last_fitness_time=None,
+                 last_tensor_time=None,
+                 last_engine_time=None,
                  tf_type=tf.float32,
 
-                 initial_test_device=True,  #
-                 var_func=None,  ###
-                 stats_file_path=None,  #
-                 graphics_file_path=None,  #
-                 pop_file_path=None,  #
-                 run_dir_path=None,  #
+                 initial_test_device=True,
+                 var_func=None, #
+                 best_overall_dir = False,
+                 stats_file_path=None,
+                 graphics_file_path=None,
+                 pop_file_path=None,
+                 run_dir_path=None,
                  read_init_pop_from_file=None,  # to be deprecated
-                 read_init_pop_from_source=None):  #
+                 read_init_pop_from_source=None):
 
         # start timers
         self.last_engine_time = time.time()
@@ -1273,7 +1279,7 @@ class Engine:
         self.effective_dims = self.dimensionality if effective_dims is None else effective_dims
         self.initial_test_device = initial_test_device
         self.device = set_device(device=device) if self.initial_test_device else device  # Check for available devices
-        self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix))
+        self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix), best_overall_dir=best_overall_dir)
         self.engine_rng = random.Random(self.experiment.seed)
         tf.random.set_seed(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
@@ -1425,6 +1431,9 @@ class Engine:
         self.best = {}
         self.best_overall = {}
         # print(self.get_json())
+
+    def get_working_dir(self):
+        return self.experiment.working_directory
 
     ## ====================== End init class ====================== ##
 
@@ -1618,19 +1627,6 @@ class Engine:
             summary_str += ("save_bests_overall = " if log_format else "Save Bests (overall): ") + str(
                 self.save_bests_overall) + "\n"
 
-        if timers or force_print:
-            summary_str += "\n############# Timers Information #############\n"
-            summary_str += ("last_init_time = " if log_format else "Elapsed initialization time: ") + str(
-                self.elapsed_init_time) + "\n"
-            summary_str += ("last_fitness_time = " if log_format else "Elapsed fitness time: ") + str(
-                self.elapsed_fitness_time) + "\n"
-            summary_str += ("last_tensor_time = " if log_format else "Elapsed tensor time: ") + str(
-                self.elapsed_tensor_time) + "\n"
-            summary_str += ("last_engine_time = " if log_format else "Total engine time: ") + str(
-                self.elapsed_engine_time) + "\n"
-            if not log_format: summary_str += "Last engine update time: " + str(self.last_engine_time) + "\n"
-        if log_format: summary_str += "_last_engine_time = " + str(self.last_engine_time) + "\n"
-
         if extra or force_print:
             summary_str += "\n############# Extra Information #############\n"
             summary_str += ("debug = " if log_format else "Debug level: ") + str(self.debug) + "\n"
@@ -1659,6 +1655,20 @@ class Engine:
             summary_str += ("tf_type = " if log_format else "Internal data type (tensorflow type): ") + str(
                 self.tf_type) + "\n"
         if log_format: summary_str += "_save_state = " + str(self.save_state) + "\n"
+
+        if timers or force_print:
+            summary_str += "\n############# Timers Information #############\n"
+            summary_str += "# You should not change this as it is information for the next run"
+            summary_str += ("last_init_time = " if log_format else "Elapsed initialization time: ") + str(
+                self.elapsed_init_time) + "\n"
+            summary_str += ("last_fitness_time = " if log_format else "Elapsed fitness time: ") + str(
+                self.elapsed_fitness_time) + "\n"
+            summary_str += ("last_tensor_time = " if log_format else "Elapsed tensor time: ") + str(
+                self.elapsed_tensor_time) + "\n"
+            summary_str += ("last_engine_time = " if log_format else "Total engine time: ") + str(
+                self.elapsed_engine_time) + "\n"
+            if not log_format: summary_str += "Last engine update time: " + str(self.last_engine_time) + "\n"
+        if log_format: summary_str += "_last_engine_time = " + str(self.last_engine_time) + "\n"
 
         if paths or force_print:
             summary_str += "\n############# Paths Information #############\n"
@@ -2408,7 +2418,7 @@ class Engine:
         # save best overall image to top level
         if self.can_save_image_best():
             # Save Best Image
-            fn = self.experiment.working_directory + str(self.current_generation).zfill(5)
+            fn = self.experiment.best_overall_directory + str(self.current_generation).zfill(5)
             save_image(self.best_overall['tensor'], 0, fn, self.target_dims, BGR=self.do_bgr,
                        extension=self.image_extension, sufix="_best_overall")
 
