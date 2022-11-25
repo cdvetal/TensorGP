@@ -408,6 +408,27 @@ class Node:
             else:
                 return None, count_terms
 
+            
+     # count prims
+     # 1 - count funcs
+     # 2 - count terms
+     # 3 - count funcs and terms
+     def get_node_c1(self, n, count_prims = 3):
+        if n == 0:
+            return self, 0
+        else:
+            node = None
+            if not self.terminal:
+                i = 0
+                for c in self.children:
+                    node, t = c.get_node_c(n - i - (count_prims & 1))
+                    i += t
+                    if node is not None:
+                        break
+                return node, i + (count_prims & 1)
+            else:
+                return None, count_prims >= 1
+            
     def debug_print_node(self):
         print("\nFancy node print")
         print(self.fancy_print())
