@@ -408,12 +408,7 @@ class Node:
             else:
                 return None, count_terms
 
-            
-     # count prims
-     # 1 - count funcs
-     # 2 - count terms
-     # 3 - count funcs and terms
-     def get_node_c1(self, n, count_prims = 3):
+    def get_node_c1(self, n, count_terms=True, count_funcs=True):
         if n == 0:
             return self, 0
         else:
@@ -421,14 +416,14 @@ class Node:
             if not self.terminal:
                 i = 0
                 for c in self.children:
-                    node, t = c.get_node_c(n - i - (count_prims & 1))
+                    node, t = c.get_node_c(n - i - count_funcs)
                     i += t
                     if node is not None:
                         break
-                return node, i + (count_prims & 1)
+                return node, i + count_funcs
             else:
-                return None, count_prims >= 1
-            
+                return None, count_terms
+
     def debug_print_node(self):
         print("\nFancy node print")
         print(self.fancy_print())
@@ -1302,7 +1297,7 @@ class Engine:
         self.device = set_device(device=device) if self.initial_test_device else device  # Check for available devices
         self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix), best_overall_dir=best_overall_dir)
         self.engine_rng = random.Random(self.experiment.seed)
-        tf.random.set_seed(self.experiment.seed)
+        #stf.random.set_seed(self.experiment.seed)
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
         self.image_extension = '.' + (image_extension if (image_extension in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
@@ -1601,7 +1596,7 @@ class Engine:
                     self.lock_dynamic_limit) + "\n"
                 if not log_format: summary_str += "Dynamic limit: " + str(self.dynamic_limit) + "\n"
 
-        if (population or force_print) and not log_format:
+        if population or (force_print and not log_format):
             summary_str += "\n############# Population Information #############\n"
             summary_str += "Best individual: \n"
             summary_str += ("Not defined" if ('tree' not in self.best) else get_ind_str(self.best,
@@ -1915,10 +1910,6 @@ class Engine:
             # print("Evaluating ind: ", p['tree'].get_str())
             # _start = time.time()
 
-            if isinstance(p['tree'], dict):
-                print("Deb")
-                print(p['tree'])
-
             test_tens = p['tree'].get_tensor(self)
             # tens = self.final_transform_domain(test_tens)
             tens = self.domain_mapping(test_tens)
@@ -1931,6 +1922,21 @@ class Engine:
         self.elapsed_tensor_time += time_tensor
         self.recent_tensor_time = time_tensor
         return tensors, time_tensor
+
+
+    # TODO: test
+    def evaluate_from_expr(self, expr, resolution):
+        _, node = str_to_tree(expr, self.terminal.set)
+        return self.evaluate_from_tree(node, resolution)
+
+
+    def evaluate_from_tree(self, ind, resolution):
+        original_res = self.target_dims
+        self.target_dims = resolution
+        final_tensor = ind.get_tensor(self)
+        self.target_dims = original_res
+        return self.domain_mapping(final_tensor)
+
 
     def fitness_func_wrap(self, population, f_path):
 
@@ -1981,7 +1987,6 @@ class Engine:
             if thisdep > maxpopd:
                 maxpopd = thisdep
 
-            # population.append({'tree': node, 'fitness': 0, 'depth': thisdep, 'nodes': t, 'tensor': [], 'valid': True, 'parents':[]})
             population.append(new_individual(node, fitness=0, depth=thisdep, nodes=t))
             if self.debug > 0:
                 print("Number of nodes:\t:" + str(t))
@@ -2069,6 +2074,7 @@ class Engine:
         if self.can_save_log():
             genstr = "gen" + str(self.current_generation).zfill(5)
             fn = self.experiment.generations_directory if fp is None else fp
+
             # write engine summary
             self.summary(force_print=True, log_format=True, write_file=True,
                          file_path=self.experiment.working_directory, file_name='state.log')
@@ -2237,12 +2243,9 @@ class Engine:
         # ===== end if =====
 
         # Save engine state to file
-        self.save_engine_state()
+        #self.save_engine_state()
 
         while self.condition():
-
-            # Update seed according to generation
-            self.engine_rng = random.Random(self.experiment.seed)
 
             # Set directory to save engine state in this generation
             self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
@@ -2404,10 +2407,6 @@ class Engine:
 
             # if self.save_state == 0: self.print_population(self.population, minimal = True)
 
-            # save engine state
-            # if self.save_to_file != 0 and (self.current_generation % self.save_to_file) == 0:
-            # self.save_state_to_file(self.experiment.logging_directory)
-            self.save_engine_state()
 
             # add population data to statistics and display gen statistics
             pops = self.population_stats(self.population)
@@ -2428,13 +2427,18 @@ class Engine:
 
             # advance generation
             self.current_generation += 1
-            self.experiment.seed += 1
+            #self.experiment.seed += 1
+
+            # save engine state
+            # if self.save_to_file != 0 and (self.current_generation % self.save_to_file) == 0:
+            # self.save_state_to_file(self.experiment.logging_directory)
+            #self.save_engine_state()
 
         # write statistics(data) to csv
         self.write_overall_to_csv(self.data)
 
         # Write final enggine state to file
-        self.save_engine_state()
+        # self.save_engine_state()
 
         # save best overall image to top level
         if self.can_save_image_best():
