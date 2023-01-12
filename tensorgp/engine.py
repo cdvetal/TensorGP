@@ -1197,6 +1197,7 @@ class Engine:
 
                  initial_test_device=True,
                  var_func=None, #
+                 reeval_elite = False,
                  best_overall_dir = False,
                  stats_file_path=None,
                  graphics_file_path=None,
@@ -1238,6 +1239,7 @@ class Engine:
         self.save_graphics = save_graphics
         self.show_graphics = show_graphics
         self.do_bgr = do_bgr
+        self.reeval_elite = reeval_elite
 
         if bloat_control not in ['very heavy', 'heavy', 'weak']:  # add full_dynamic_size, dynamic_size
             bloat_control = 'off'
@@ -1803,6 +1805,9 @@ class Engine:
 
         return max_nodes, Node(value=primitive, terminal=terminal, children=children)
 
+
+
+
     def generate_population(self, individuals, method, max_nodes, max_depth, min_depth=-1):
         # print("Entering generate program (min, max)", min_depth, max_depth)
 
@@ -2052,6 +2057,7 @@ class Engine:
             print("Generated Population: ")
             self.print_population(population)
 
+        #print("Evaluating ", str(len(population)), " individuals in initialization pop gen.", str(self.current_generation))
         population, best_pop = self.fitness_func_wrap(population=population, f_path=self.experiment.cur_image_directory)
         total_time = self.recent_fitness_time + self.recent_tensor_time
 
@@ -2165,16 +2171,15 @@ class Engine:
         if (start_from_last_pop is False) or (start_from_last_pop is True):
             start_from_last_pop *= self.population_size
         start_from_last_pop = clamp(0, start_from_last_pop, self.population_size)
-        if self.save_state == 0:
+
+        if (self.save_state == 0) or (len(self.population) == 0):
             start_from_last_pop = 0
 
         # either generate initial pop randomly or read fromfile along with remaining experiment data
         self.data = []
 
-        if len(self.population) == 0:
-            start_from_last_pop = 0
-
-        if start_from_last_pop < self.population_size or self.save_state == 0:  # ===== start if =====
+        # ===== start if =====
+        if start_from_last_pop < self.population_size or self.save_state == 0:
             self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
             population, best = self.initialize_population(max_depth=self.max_init_depth,
@@ -2291,8 +2296,12 @@ class Engine:
                     self.current_generation) + ": " + str(rstd))
 
             # calculate fitness of the new population
-            temp_population, temp_best = self.fitness_func_wrap(population=temp_population,
-                                                                f_path=self.experiment.current_directory)
+            #print("Evaluating ", str(len(temp_population)), " individuals in evolution gen.", str(self.current_generation))
+            temp_population, _ = self.fitness_func_wrap(population=temp_population, f_path=self.experiment.current_directory)
+
+            # force reevaluation of elite (for example when fitness func is dynamic)
+            if self.reeval_elite:
+                new_population, _ = self.fitness_func_wrap(population=new_population, f_path=self.experiment.current_directory)
 
             # bloat control:
             #
@@ -2313,6 +2322,7 @@ class Engine:
                 #    ind = temp_population[current_individual]
                 #    new_population.append(ind)
                 new_population += temp_population
+
             else:
                 accepted = 0
                 depth_mode = self.bloat_mode == 'depth'
@@ -2379,6 +2389,10 @@ class Engine:
                     ind['valid'] = sizeind < self.dynamic_limit  # update illegals according to final limits
                     if not ind['valid']:
                         illegals += 1
+
+
+
+
 
             # update population
             self.population = new_population
