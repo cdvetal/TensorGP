@@ -68,6 +68,7 @@ _final_transform = [0.0, 255.0]
 _final_transform_delta = _final_transform[1] - _final_transform[0]
 _do_final_transform = False
 _tf_type = tf.float32
+warp_batch = 4
 
 # np debug options
 if _tgp_np_debug:
@@ -202,7 +203,36 @@ def resolve_tan_node(child1, dims=[]):
                     tf.constant(0, tf.float32, dims))
 
 
-def resolve_warp_node(tensors, image, dimensions):
+def resolve_warp_node(tensors, image, dimensions, batches = warp_batch):
+    n = len(dimensions)
+    tensors = [tf.where(tf.math.is_nan(t), tf.zeros_like(t), t) for t in tensors]
+
+    nb = min(batches, dimensions[0])
+    step = int(dimensions[0] / nb)
+    acc_tensor = list()
+    for si in range(0, dimensions[0], step):
+        ei = min(si + step, dimensions[0])
+        dim = [ei - si] + list(dimensions[1:])
+
+        indices = tf.stack([
+            tf.clip_by_value(
+                tf.round(tf.multiply(
+                    tf.constant((dimensions[k] - 1) * 0.5, tf.float32, shape=dim),
+                    tf.math.add(tensors[k][si:ei], tf.constant(1.0, tf.float32, shape=dim))
+                )),
+                clip_value_min=0.0,
+                clip_value_max=(dimensions[k] - 1)
+            ) for k in range(n)],
+            axis=n
+        )
+
+        indices = tf.cast(indices, tf.int32)
+        acc_tensor.append(tf.gather_nd(image, indices))
+
+    return tf.reshape(tf.stack(acc_tensor), shape=dimensions)
+
+
+def resolve_warp_node1(tensors, image, dimensions):
     n = len(dimensions)
     # print("[DEBUG]:\tWarp dimensions: " + str(dimensions))
     # print("[DEBUG]:\tWarp log(y): ")
