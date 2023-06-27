@@ -323,8 +323,9 @@ def old_tf_rmse(child1, child2):
 # The idea is that this is always the same, so compile
 @tf.function
 def tf_rmse(child1, child2):
-    child1 = tf.scalar_mul(1 / 127.5, child1)
-    child2 = tf.scalar_mul(1 / 127.5, child2)
+    child1 = tf.scalar_mul(1.0 / 127.5, child1)
+    print(child2)
+    child2 = tf.scalar_mul(1.0 / 127.5, child2)
     return tf.sqrt(tf.reduce_mean(tf.square(child1 - child2)))
 
 
@@ -1443,7 +1444,8 @@ class Engine:
                     tf.float32)  # cast to an int tensor
                 # self.target = tf.cast(tree.get_tensor(self) * 127.5, tf.float32) # cast to an int tensor
         else:
-            self.target = target
+            #self.target = target
+            self.target = tf.convert_to_tensor(target, dtype=tf_type)
 
         self.current_generation = 0
 
@@ -2971,9 +2973,14 @@ class Terminal_Set:
             else:
                 _, tree = str_to_tree(t, self.set)
                 tensor = tree.get_tensor(engref)
-        elif hasattr(t, "__module__") and type(t).__module__ == 'numpy':
-            tensor = tf.convert_to_tensor(t)
+        elif hasattr(type(t), "__module__") and type(t).__module__ == 'numpy':
+            #print("ldsfvj")
+            tensor = tf.convert_to_tensor(t, dtype=_tf_type)
         else:
+            #val1 = 'numpy' == type(t).__module__
+            #val2 = hasattr(type(t), "__module__")
+            #print(val1)
+            #print(val2)
             tensor = t
 
         self.set[name] = tensor
