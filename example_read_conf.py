@@ -1,4 +1,4 @@
-from tensorgp.engine_scarlett import *
+from tensorgp.engine import *
 
 # random fitness to exemplify
 def rand_fit(**kwargs):
