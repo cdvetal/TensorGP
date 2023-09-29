@@ -1579,7 +1579,8 @@ class Engine:
             summary_str += ("mutation_probs = " if log_format else "Mutations probabilities: ") + "["
             lim = len(self.mutation_probs)
             for m in range(lim):
-                summary_str += str(self.mutation_probs[m])
+                prob_sub = 1 if m == (lim - 1) else self.mutation_probs[m + 1]
+                summary_str += str(prob_sub - self.mutation_probs[m])
                 if m < lim - 1:
                     summary_str += ", "
             summary_str += "]\n"
