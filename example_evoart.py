@@ -39,15 +39,20 @@ def nima_classifier(**kwargs):
 
 
     number_tensors = len(tensors)
-    with tf.device('/CPU:0'):
 
-        # NIMA classifier
+    with tf.device('/GPU:0'):
+
+        # NIMA classifier [inputs in range 0 255]
         x = np.stack([tensors[index].numpy() for index in range(number_tensors)], axis = 0)
+
         x = preprocess_input_mob(x)
         scores = model.predict(x, batch_size = number_tensors, verbose=0)
 
         # scores
         for index in range(number_tensors):
+
+            #if generation % _stf == 0:
+                #save_image(tensors[index], index, fn, 3) # save image
 
             mean = mean_score(scores[index])
             std = std_score(scores[index])
@@ -61,14 +66,6 @@ def nima_classifier(**kwargs):
             population[index]['fitness'] = fit
 
     return population, best_ind
-    # return population, population[best_ind]
-
-
-# if no function set is provided, the engine will use all internally available operators:
-#fset = {'abs', 'add', 'and', 'clip', 'cos', 'div', 'exp', 'frac', 'if', 'len', 'lerp', 'log',
-#        'max', 'mdist', 'min', 'mod', 'mult', 'neg', 'or', 'pow', 'sign', 'sin', 'sqrt', 'sstep',
-#        'sstepp', 'step', 'sub', 'tan', 'warp', 'xor'}
-
 
 if __name__ == "__main__":
 
@@ -77,26 +74,27 @@ if __name__ == "__main__":
 
     # GP params
     dev = '/gpu:0'  # device to run, write '/cpu_0' to tun on cpu
-    number_generations = 10
-    pop_size = 50
+    number_generations = 5
+    pop_size = 10
     tour_size = 3
     mut_prob = 0.1
     cross_prob = 0.9
-    max_tree_dep = 10
+    max_tree_dep = 15
     # tell the engine that the RGB does not explicitly make part of the terminal set
     edims = 2
 
     # Initialize NIMA classifier
     base_model = MobileNet((None, None, 3), alpha=1, include_top=False, pooling='avg', weights=None)
-    x = Dropout(0.75)(base_model.output)
+    x = Dropout(0)(base_model.output)
     x = Dense(10, activation='softmax')(x)
     model = Model(base_model.input, x)
     model.load_weights('weights/weights_mobilenet_aesthetic_0.07.hdf5')
 
     #seed = random.randint(0, 0x7fffffff)
-    # seed = 39485793482  # reproducibility
-    seed = 2020
+    seed = 2020  # reproducibility
 
+
+    # create engine
     engine = Engine(fitness_func=nima_classifier,
                     population_size=pop_size,
                     tournament_size=tour_size,
@@ -108,19 +106,17 @@ if __name__ == "__main__":
                     objective='maximizing',
                     device=dev,
                     stop_criteria='generation',
-                    codomain = [-1, 1],
-                    domain=[-1, 1],
-                    do_final_transform = True,
-                    final_transform = [0, 255],
                     stop_value=number_generations,
-                    effective_dims = edims,
-                    seed = seed,
+                    domain=[-1, 1],
+                    codomain=[0, 1],
+                    do_final_transform=True,
+                    effective_dims=edims,
+                    seed=seed,
                     debug=0,
                     save_to_file=1, # save all images from each 10 generations
                     save_graphics=True,
                     show_graphics=False,
                     read_init_pop_from_file=None)
-    # create engine
 
     # This experiment is comparatively slower, but bear inmind that the NIMA classifier takes
     # a considerable amount of time

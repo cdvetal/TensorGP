@@ -25,6 +25,8 @@
 
 
 import csv
+import pickle
+import subprocess
 from collections import Counter
 import copy
 import datetime
@@ -32,6 +34,7 @@ import math
 import os
 import re
 
+import keyboard as keyboard
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -45,13 +48,18 @@ from PIL import Image
 import configparser
 import ast
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+tf.get_logger().setLevel('ERROR')
+#gc.set_debug(gc.DEBUG_LEAK)
+
 import numpy as np
 
 from skimage import io
 from skimage.transform import resize
 from skimage.color import rgb2gray
+
 
 # Evil global variables
 _tgp_np_debug = 1
@@ -69,6 +77,7 @@ _final_transform_delta = _final_transform[1] - _final_transform[0]
 _do_final_transform = False
 _tf_type = tf.float32
 warp_batch = 4
+save_seed_file = "seed.obj"
 
 # np debug options
 if _tgp_np_debug:
@@ -323,9 +332,8 @@ def old_tf_rmse(child1, child2):
 # The idea is that this is always the same, so compile
 @tf.function
 def tf_rmse(child1, child2):
-    child1 = tf.scalar_mul(1.0 / 127.5, child1)
-    print(child2)
-    child2 = tf.scalar_mul(1.0 / 127.5, child2)
+    child1 = tf.scalar_mul(1 / 127.5, child1)
+    child2 = tf.scalar_mul(1 / 127.5, child2)
     return tf.sqrt(tf.reduce_mean(tf.square(child1 - child2)))
 
 
@@ -466,6 +474,11 @@ class Node:
 
 ## ====================== Utility methods ====================== ##
 
+def interactive_pause(key_str='space'):
+    while True:
+        if keyboard.read_key() == key_str:
+            break
+
 def constrain(a, n, b):
     return min(max(n, a), b)
 
@@ -492,6 +505,7 @@ def save_image(tensor, index, fn, dims, sufix='', extension=".png", BGR=False): 
     if extension.strip(".") not in ["png", "jpg", "jpeg"]:
         extension = ".png"
     path = fn + "_ind" + str(index).zfill(5) + sufix + extension
+    # print(path)
     aux = get_np_array(tensor)
 
     # print()
@@ -502,9 +516,11 @@ def save_image(tensor, index, fn, dims, sufix='', extension=".png", BGR=False): 
 
     try:
         if len(dims) == 2:
+            #os.makedirs(path, exist_ok=True)
             Image.fromarray(aux, mode="L").save(path)  # no color
         elif len(dims) == 3:
             if BGR: aux = aux[:, :, ::-1]
+            #os.makedirs(path, exist_ok=True)
             Image.fromarray(aux, mode="RGB").save(path)  # color
         else:
             print("Attempting to save tensor with rank ", len(dims),
@@ -595,28 +611,27 @@ def serialize_sets(obj):
 
 
 def load_engine(fitness_func=None, var_func=None, mutation_funcs=None, pop_source=None,
-                file_path='', file_name='state.log'):
+                file_path='', file_name='state.log', seed_file_name = None):
     config = configparser.RawConfigParser()
     fn = file_path + file_name
     config.read(fn)
     conf_dict = dict(config.items('state'))
 
     # print(conf_dict)
-    # Serializing json
-    # json_object = json.dumps(conf_dict, indent=4)
-    # print(json_object)
 
     kwargs = {}
     for k, v in conf_dict.items():
+
         if k[0] != '_':
             if k == 'tf_type':
+                print("what is the value?", v)
                 kwargs[k] = tf.as_dtype(v.split("'")[1])
             elif v[0] == "{":
                 kwargs[k] = set(v[1:-1].replace("'", "").replace(" ", "").split(","))
             else:
                 try:
                     kwargs[k] = ast.literal_eval(v)
-                    # kwargs[k] = eval(v)
+
                 except (ValueError, SyntaxError):
                     kwargs[k] = v
                 except:
@@ -624,25 +639,51 @@ def load_engine(fitness_func=None, var_func=None, mutation_funcs=None, pop_sourc
                         v) + "." + bcolors.END)
                     raise
 
-    if pop_source is None:
-        last_source = kwargs['read_init_pop_from_source']
-        print("[WARNING]:\tNew population source is None, reading population from last engine source: " +
-              ("Random inititialization" if last_source is None else str(last_source)) + ".")
-    else:
-        kwargs['read_init_pop_from_source'] = pop_source
 
-    # print(kwargs)
-    # json_object = json.dumps(kwargs, indent=4, default=serialize_sets)
-    # print(json_object)
-
+    gen_num =  int(conf_dict['_current_generation'])
     print(bcolors.WARNING + "Loading engine with timestamp: " +
           datetime.datetime.fromtimestamp(int(float(conf_dict['_last_engine_time']))).strftime(
               '%Y-%m-%d %H:%M:%S') + bcolors.ENDC)
+    print(bcolors.WARNING + "Starting from generation: " + str(gen_num) + bcolors.ENDC)
+
+    #gen_str = str(conf_dict['_last_pop']).replace('\\', "\\\\")
+    gen_str = str(conf_dict['_last_pop'])
+    work_dir = str(conf_dict['_work_dir'])
+    #print("Gen str", gen_str)
+    #print("os spe", os.path.sep)
+    if pop_source is None:
+        if gen_str is not None:
+            kwargs['read_init_pop_from_source'] = gen_str
+            print(bcolors.WARNING + "Starting from population found in file: " + gen_str + bcolors.ENDC)
+        else:
+            last_source = kwargs['read_init_pop_from_source']
+            print("[WARNING]:\tNew population source is None, reading population from last engine source: " +
+                  ("Random inititialization" if last_source is None else str(last_source)) + ".")
+    else: kwargs['read_init_pop_from_source'] = pop_source
+
+    # load seed
+    flag_seed = True
+    ss = None
+    try:
+        sfp = (work_dir + save_seed_file) if seed_file_name is None else seed_file_name
+        with open(sfp, 'rb') as pickle_seed_file:
+            ss = pickle.load(pickle_seed_file)
+            print(bcolors.WARNING + "Loading seed from file: " + sfp + bcolors.ENDC)
+
+    except (FileNotFoundError, TypeError):
+        #kwargs['seed_state'] = None
+        flag_seed = False
+    if not flag_seed:
+        print(bcolors.WARNING + "Did not find suitable seed file, randomizing seed: " + bcolors.ENDC)
+        kwargs['seed'] = random.randint(0, 0x7fffffff)
+
+    # print(kwargs)
     engine = Engine(fitness_func=fitness_func,
                     var_func=var_func,
                     mutation_funcs=mutation_funcs,
+                    seed_state=ss,
                     **kwargs)
-    engine.current_generation = int(conf_dict['_current_generation'])
+    engine.current_generation = gen_num
     engine.save_state = int(conf_dict['_save_state']) + 1
 
     return engine
@@ -651,16 +692,20 @@ def load_engine(fitness_func=None, var_func=None, mutation_funcs=None, pop_sourc
 # TODO: should this be an inner class of Engine()?
 class Experiment:
 
-    def set_experiment_filename(self, addon=None):
-        date = datetime.datetime.utcnow().strftime('%Y_%m_%d__%H_%M_%S_%f')[:-3]
-        prefix = addon if addon is not None else ""
-        return prefix + "__run__" + date + "__" + str(self.ID)
+    def set_experiment_filename(self, fixed_path=False, addon=None):
+        if fixed_path is None:
+            date = datetime.datetime.utcnow().strftime('%Y_%m_%d__%H_%M_%S_%f')[:-3]
+            experiment_filename = (addon if addon is not None else "") + "__run__" + date + "__" + str(self.ID)
+        else:
+            experiment_filename = str(fixed_path)
+
+        return experiment_filename
 
     def set_generation_directory(self, generation, can_save_image_pop):
         try:
             self.cur_image_directory = self.all_directory + "generation_" + str(generation).zfill(5) + _tgp_delimiter
             if can_save_image_pop():
-                os.makedirs(self.cur_image_directory)
+                os.makedirs(self.cur_image_directory, exist_ok=True)
             # print("[DEBUG]:\tSet current directory to: " + self.current_directory)
         except OSError as error:
             if error is FileExistsError:
@@ -706,18 +751,19 @@ class Experiment:
                  immigration=None,
                  seed=None,
                  wd=None,
+                 fixed = False,
                  addon=None,
                  best_overall_dir=False):
 
         self.ID = self.set_experiment_ID()
         self.seed = self.ID if (seed is None) else seed
-        self.filename = self.set_experiment_filename(addon=addon)
+        self.filename = self.set_experiment_filename(addon=addon, fixed_path=fixed)
         self.prefix = addon
 
         try:
-            self.working_directory = (
-                    os.getcwd() + sub_wd + addon + _tgp_delimiter + self.filename + _tgp_delimiter) if wd is None else wd
-            os.makedirs(self.working_directory)
+            self.working_directory = (os.getcwd() + sub_wd + addon + _tgp_delimiter + self.filename + _tgp_delimiter) if wd is None else wd
+            os.makedirs(self.working_directory, exist_ok=True)
+
         except OSError as error:
             if error is FileExistsError:
                 print(
@@ -745,13 +791,16 @@ class Experiment:
         self.generations_directory = self.logging_directory + "generations" + _tgp_delimiter
         self.graphs_directory = self.working_directory
         try:
+
             os.makedirs(self.current_directory, exist_ok=True)
             os.makedirs(self.image_directory, exist_ok=True)
-            if best_overall_dir: os.makedirs(self.best_overall_directory, exist_ok=True)
+            if best_overall_dir:
+                os.makedirs(self.best_overall_directory, exist_ok=True)
             os.makedirs(self.cur_image_directory, exist_ok=True)
             os.makedirs(self.bests_directory, exist_ok=True)
             os.makedirs(self.all_directory, exist_ok=True)
-            if immigration is not None: os.makedirs(self.immigration_directory)
+            if immigration is not None:
+                os.makedirs(self.immigration_directory)
             os.makedirs(self.logging_directory, exist_ok=True)
             os.makedirs(self.generations_directory, exist_ok=True)
             os.makedirs(self.graphs_directory, exist_ok=True)
@@ -830,6 +879,22 @@ def default_json(obj):
     # return json.JSONEncoder.default(self, obj)
 
 
+
+
+#TODO: check rest of code to use this function where it fits
+def print_population(population, best=None, print_expr=False, msg=""):
+    print("\nPopulation print", msg)
+    for i in range(len(population)):
+        to_p = "Fitness of ind " + str(i) + ": " + str(population[i]['fitness'])
+        if print_expr:
+            to_p += ", expr:  " + population[i]['tree'].get_str()
+        print(to_p)
+    if best is not None:
+        to_p = "Fitness of best: " + str(best['fitness'])
+        if print_expr:
+            to_p += ", expr:  " + best['tree'].get_str()
+        print(to_p)
+
 ## ====================== Engine ====================== ##
 
 class Engine:
@@ -907,6 +972,7 @@ class Engine:
 
         return new_ind
 
+
     def crossover(self, parent_1, parent_2):
         crossover_node = None
 
@@ -943,6 +1009,7 @@ class Engine:
 
         return new_ind
 
+
     def get_candidates(self, node, root):
         candidates = Counter()
         if not node.terminal:
@@ -953,6 +1020,7 @@ class Engine:
         if root and candidates == Counter():
             candidates.update([node])
         return candidates
+
 
     def tournament_selection(self):
         if self.objective == 'minimizing':
@@ -969,6 +1037,7 @@ class Engine:
                     winner = i
         return winner
 
+
     def mutation(self, parent):
         random_n = self.engine_rng.random()
         for k in range(len(self.mutation_funcs) - 1, -1, -1):
@@ -979,12 +1048,15 @@ class Engine:
                 else:
                     return self.mutation_funcs[k](parent)
 
+
     def random_terminal(self):
         _, node = self.generate_program(method='full', max_nodes=0, max_depth=0)
         return node
 
+
     def copy_node(self, n):
         return Node(value=n.value, terminal=n.terminal, children=[] + n.children)
+
 
     def delete_mutation(self, parent):
         new_ind = copy.deepcopy(parent)
@@ -1006,6 +1078,7 @@ class Engine:
             chosen_node.children = chosen_child.children  # does not need []
 
         return new_ind
+
 
     def insert_mutation(self, parent):
         new_ind = copy.deepcopy(parent)
@@ -1047,6 +1120,7 @@ class Engine:
                 chosen_child.children.append(self.random_terminal())
         return new_ind
 
+
     def list_nodes(self, node, dep=0, root=False, add_funcs=True, add_terms=True, add_root=False):
         res = []
         if (node.terminal and (add_terms or (root and add_root))) or (
@@ -1056,6 +1130,7 @@ class Engine:
             for c in node.children:
                 res += self.list_nodes(c, dep + 1, False, add_funcs, add_terms, add_root)
         return res
+
 
     # This is the same , except it does not go back to the loop
     def hacky_subtree_mutation(self, parent):
@@ -1078,6 +1153,7 @@ class Engine:
             new_ind = mutation_node
         return new_ind
 
+
     def subtree_mutation(self, parent):
         new_ind = copy.deepcopy(parent)
         # candidates = self.get_candidates(new_ind, True)
@@ -1093,6 +1169,7 @@ class Engine:
         else:  # means its root in this case
             new_ind = mutation_node
         return new_ind
+
 
     # TODO: Support for genetic operators per node
     def replace_nodes(self, node):
@@ -1136,12 +1213,14 @@ class Engine:
                 if self.engine_rng.random() < self.replace_prob:
                     self.replace_nodes(i)
 
+
     def point_mutation(self, parent):
         new_ind = copy.deepcopy(parent)
         candidates = self.list_nodes(new_ind, root=True, add_funcs=True, add_terms=True, add_root=True)
         chosen_node, _ = self.engine_rng.choice(candidates)
         self.replace_nodes(chosen_node)
         return new_ind
+
 
     ### needs to be passed
     def __init__(self,
@@ -1172,6 +1251,7 @@ class Engine:
                  codomain=None,
                  final_transform=None,
                  do_final_transform=False,
+                 fixed_path=None,
 
                  bloat_control='off',
                  bloat_mode='depth',
@@ -1193,9 +1273,10 @@ class Engine:
                  target=None,
                  max_nodes=-1,
                  seed=None,
+                 seed_state=None,
                  debug=0,
                  save_graphics=True,
-                 show_graphics=True,
+                 show_graphics=False,
                  save_image_best=True,
                  save_image_pop=True,
                  save_to_file=10,
@@ -1208,6 +1289,7 @@ class Engine:
                  exp_prefix='',
                  device='/cpu:0',
                  do_bgr=False,
+                 interface=False,
 
                  polar_coordinates=False,
                  do_polar_mask=True,
@@ -1234,6 +1316,8 @@ class Engine:
                  graphics_file_path=None,
                  pop_file_path=None,
                  run_dir_path=None,
+                 reeval_fitness_start=True,
+                 start_fitness_file=None,
                  read_init_pop_from_file=None,  # to be deprecated
                  read_init_pop_from_source=None):
 
@@ -1328,9 +1412,21 @@ class Engine:
         self.effective_dims = self.dimensionality if effective_dims is None else effective_dims
         self.initial_test_device = initial_test_device
         self.device = set_device(device=device) if self.initial_test_device else device  # Check for available devices
-        self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix), best_overall_dir=best_overall_dir)
+
+        self.fixed_path = fixed_path
+        self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix), fixed=self.fixed_path, best_overall_dir=best_overall_dir)
+        self.flag_file =  self.experiment.all_directory + "_flag_to_evolve"
+        self.interface = interface
+
+        # self.engine_rng = random.Random(self.experiment.seed) if seed_state is None else random.Random().setstate(seed_state)
+        # random.Random().setstate(seed_state) does not work
         self.engine_rng = random.Random(self.experiment.seed)
-        #stf.random.set_seed(self.experiment.seed)
+        if seed_state is not None:
+            self.engine_rng.setstate(seed_state)
+
+        #print("setting seed state: ", seed_state)
+        #print("Type of engine RNG: ", type(self.engine_rng))
+
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
         self.image_extension = '.' + (image_extension if (image_extension in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
@@ -1338,6 +1434,8 @@ class Engine:
             graphic_extension if (graphic_extension in ['pdf', 'png', 'jpg', 'jpeg']) else 'pdf')
         self.replace_prob = max(0.0, min(1.0, replace_prob))
         self.pop_source = read_init_pop_from_file if read_init_pop_from_file is not None else read_init_pop_from_source
+        self.start_fitness_file = start_fitness_file
+        self.reeval_fitness_start = reeval_fitness_start
         self.save_log = save_log
         self.write_engine_state = write_engine_state
         self.save_image_best = save_image_best
@@ -1373,7 +1471,7 @@ class Engine:
 
         # check for tf data type validity
         self.tf_type = tf_type if (hasattr(tf_type, "__module__") and (
-                    ('tensorflow' and 'dtypes') in tf_type.__module__.split("."))) else tf.float32
+                ('tensorflow' and 'dtypes') in tf_type.__module__.split("."))) else tf.float32
         _tf_type = self.tf_type
 
         # set domain
@@ -1444,8 +1542,7 @@ class Engine:
                     tf.float32)  # cast to an int tensor
                 # self.target = tf.cast(tree.get_tensor(self) * 127.5, tf.float32) # cast to an int tensor
         else:
-            #self.target = target
-            self.target = tf.convert_to_tensor(target, dtype=tf_type)
+            self.target = target
 
         self.current_generation = 0
 
@@ -1462,9 +1559,9 @@ class Engine:
         if stop_criteria == 'fitness':  # if fitness then stop value means error
             self.stop_value = stop_value
             if self.objective == 'minimizing':
-                self.condition = lambda: (self.best > self.stop_value)
+                self.condition = lambda: (self.best['fitness'] > self.stop_value)
             else:
-                self.condition = lambda: (self.best < self.stop_value)
+                self.condition = lambda: (self.best['fitness'] < self.stop_value)
             self.next_condition = self.condition
         else:  # if generations then stop_value menas number of generations to evaluate
             self.stop_value = int(stop_value)
@@ -1491,7 +1588,8 @@ class Engine:
                 bloat=False, trees=False, timers=False, general=False, probs=False, domain=False, graphics=False,
                 extra=False, images=False, logs=False, paths=False, experiment=False, terminals=False,
                 functions=False, population=False, log_format=False, write_file=False, file_path=None,
-                file_name='state.log'):
+                file_name='state.log', pop_path = None):
+
 
         summary_str = ""
         if force_print:
@@ -1578,6 +1676,9 @@ class Engine:
             summary_str += "]\n"
             summary_str += ("mutation_probs = " if log_format else "Mutations probabilities: ") + "["
             lim = len(self.mutation_probs)
+
+
+
             for m in range(lim):
                 prob_sub = 1 if m == (lim - 1) else self.mutation_probs[m + 1]
                 summary_str += str(prob_sub - self.mutation_probs[m])
@@ -1696,6 +1797,7 @@ class Engine:
                 summary_str += "Last saved population: " + str(self.last_stop) + "\n"
                 summary_str += "Function to generate terminal vars: " + get_func_name(self.var_func) + "\n"
             if self.target_expr != 'undefined':  # write the expression instead
+                #summary_str += (("target = " + '"') if log_format else "Target tensor: ") + str(self.target_expr) + ('"' if log_format else "") + "\n"
                 summary_str += ("target = " if log_format else "Target tensor: ") + str(self.target_expr) + "\n"
             else:  # write the tensor
                 if hasattr(self.target, "__module__") and type(self.target).__module__.split(".", 1)[0] == 'tensorflow':
@@ -1705,6 +1807,13 @@ class Engine:
             summary_str += ("minimal_print = " if log_format else "Mininal printing: ") + str(self.minimal_print) + "\n"
             summary_str += ("tf_type = " if log_format else "Internal data type (tensorflow type): ") + str(
                 self.tf_type) + "\n"
+            summary_str += ("reeval_fitness_start = " if log_format else "Reeval Fitness Start: ") + str(self.reeval_fitness_start) + "\n"
+            summary_str += ("reeval_elite = " if log_format else "Reeval Elite: ") + str(self.reeval_elite) + "\n"
+            summary_str += ("_seed_state = " if log_format else "Seed State: ") + str(self.engine_rng.getstate()) + "\n"
+            summary_str += ("interface = " if log_format else "Interface: ") + str(self.interface) + "\n"
+            summary_str += ("fixed_path = " if log_format else "Fixed Path: ") + str(self.fixed_path) + "\n"
+
+
         if log_format: summary_str += "_save_state = " + str(self.save_state) + "\n"
 
         if timers or force_print:
@@ -1719,7 +1828,13 @@ class Engine:
             summary_str += ("last_engine_time = " if log_format else "Total engine time: ") + str(
                 self.elapsed_engine_time) + "\n"
             if not log_format: summary_str += "Last engine update time: " + str(self.last_engine_time) + "\n"
+
         if log_format: summary_str += "_last_engine_time = " + str(self.last_engine_time) + "\n"
+
+        summary_str += ("_work_dir = " if log_format else "Working directory: ") + str(self.experiment.working_directory) + "\n"
+
+        if pop_path is not None:
+            summary_str += ("_last_pop = " if log_format else "Current generation: ") + str(pop_path) + "\n"
 
         if paths or force_print:
             summary_str += "\n############# Paths Information #############\n"
@@ -1732,6 +1847,8 @@ class Engine:
                 self.pop_source) + "\n"
             summary_str += ("exp_prefix = " if log_format else "Experimence prefix: ") + '"' + str(
                 self.experiment.prefix) + '"' + "\n"
+            summary_str += ("start_fitness_file = " if log_format else "Starting Fitness File: ") + str(
+                self.start_fitness_file) + "\n"
 
         if (experiment or force_print) and not log_format:
             summary_str += "\n############# Experiment Information #############\n"
@@ -1839,8 +1956,6 @@ class Engine:
         return max_nodes, Node(value=primitive, terminal=terminal, children=children)
 
 
-
-
     def generate_population(self, individuals, method, max_nodes, max_depth, min_depth=-1):
         # print("Entering generate program (min, max)", min_depth, max_depth)
 
@@ -1906,6 +2021,7 @@ class Engine:
 
         return pop_nodes, population
 
+
     def codomain_range(self, final_tensor):
         # 'dynamic' and 'mod' modes normmalize to 0..1
         if self.domain_mode == 'log':
@@ -1917,6 +2033,7 @@ class Engine:
             final_tensor = tf.math.abs(final_tensor)
             final_tensor = final_tensor - tf.math.floor(final_tensor)
         return tf.clip_by_value(final_tensor, clip_value_min=_codomain[0], clip_value_max=_codomain[1])
+
 
     def domain_mapping(self, tensor):
         # print("Initial:\n", tensor.numpy())
@@ -1937,8 +2054,6 @@ class Engine:
 
         return final_tensor
 
-    # def final_transform_domain(self, final_tensor):
-    #    return final_tensor
 
     def calculate_tensors(self, population):
         tensors = []
@@ -1979,11 +2094,11 @@ class Engine:
     def fitness_func_wrap(self, population, f_path):
 
         # calculate tensors
-
         if self.debug > 4: print("\nEvaluating generation: " + str(self.current_generation))
         with tf.device(self.device):
             tensors, time_taken = self.calculate_tensors(population)
         if self.debug > 4: print("Calculated " + str(len(population)) + " tensors in (s): " + str(time_taken))
+
 
         # calculate fitness
         if self.debug > 4: print("Assessing fitness of individuals...")
@@ -1996,6 +2111,7 @@ class Engine:
                                                  tensors=tensors,
                                                  f_path=f_path,
                                                  image_extension=self.image_extension,
+                                                 work_dir = self.experiment.working_directory,
                                                  polar_mask=self.polar_mask,
                                                  rng=self.engine_rng,
                                                  objective=self.objective,
@@ -2006,12 +2122,17 @@ class Engine:
                                                  best_o=self.best_overall,
                                                  debug=False if (self.debug == 0) else True)
         fitness_time = time.time() - _s
+        #tf.keras.backend.clear_session() # Unreachable objects problem
+
 
         self.elapsed_fitness_time += fitness_time
         self.recent_fitness_time = fitness_time
         if self.debug > 4: print("Assessed " + str(len(population)) + " tensors in (s): " + str(fitness_time))
 
+        #print_population(population, best=population[best_ind], print_expr=True, msg="after fit")
+
         return population, population[best_ind]
+
 
     def generate_pop_from_expr(self, strs):
         population = []
@@ -2019,7 +2140,7 @@ class Engine:
         maxpopd = -1
 
         for p in strs:
-            t, node = str_to_tree(p, self.terminal.set)
+            t, node = str_to_tree(p, self.terminal.set, constrain_domain=False)
 
             thisdep, t = node.get_depth()
             if thisdep > maxpopd:
@@ -2034,6 +2155,7 @@ class Engine:
             print("Total number of nodes:\t" + str(nodes_generated))
 
         return population, nodes_generated, maxpopd
+
 
     def generate_pop_from_file(self, read_from_file, pop_size=float('inf')):
         # open population files
@@ -2053,6 +2175,36 @@ class Engine:
         # convert expressions to trees
         return self.generate_pop_from_expr(strs)
 
+
+    def read_fitness_from_file(self, population, sl=1, fitness_row = 2):
+        line_start = sl
+        line_end = len(population) + line_start
+        lcnt = 0
+        best_ind = 0
+
+        # set objective function according to min/max
+        fit = 0
+        if self.objective == 'minimizing':
+            condition = lambda: (fit < max_fit)  # minimizing
+            max_fit = float('inf')
+        else:
+            condition = lambda: (fit > max_fit)  # maximizing
+            max_fit = float('-inf')
+
+        with open(self.start_fitness_file, mode='r') as csv_file:
+            csv_reader = csv.reader(csv_file)
+            for row in csv_reader:
+                if line_start <= lcnt < line_end:
+                    fit = float(row[fitness_row])
+                    population[lcnt - 1]['fitness'] = fit
+                    if condition():
+                        max_fit = fit
+                        best_ind = lcnt - 1
+                lcnt += 1
+
+        return population, population[best_ind]
+
+
     def initialize_population(self, max_depth=8, min_depth=-1, individuals=100, method='ramped half-and-half',
                               max_nodes=-1, read_from=None):
         start_init_population = time.time()
@@ -2061,7 +2213,7 @@ class Engine:
         else:
 
             maxpopd = -1
-            if isinstance(read_from, str) and ".txt" in read_from:  # read from file
+            if isinstance(read_from, str) and (".txt"  in read_from) or (".csv" in read_from):  # read from file
                 population, nodes_generated, maxpopd = self.generate_pop_from_file(read_from_file=read_from,
                                                                                    pop_size=self.population_size)
             elif isinstance(read_from, list):  # generate from list of strs
@@ -2070,7 +2222,7 @@ class Engine:
 
             else:  # give warning generate randomly
                 print(bcolors.FAIL + "[ERROR]:\tCould not read from source: " + str(
-                    read_from) + ", not a list of strinmgs and not a file, randomly generating population instead.",
+                    read_from) + ", not a list of strings and not a file, randomly generating population instead.",
                       bcolors.ENDC)
                 read_from = None
                 nodes_generated, population = self.generate_population(individuals, method, max_nodes, max_depth,
@@ -2091,7 +2243,19 @@ class Engine:
             self.print_population(population)
 
         #print("Evaluating ", str(len(population)), " individuals in initialization pop gen.", str(self.current_generation))
-        population, best_pop = self.fitness_func_wrap(population=population, f_path=self.experiment.cur_image_directory)
+
+
+        flag_fitness = False
+        if (self.start_fitness_file is not None) and self.reeval_fitness_start:
+            print(bcolors.WARNING + "Reading initial population fitness from file: " + str(self.start_fitness_file) + bcolors.ENDC)
+            try:
+                population, best_pop = self.read_fitness_from_file(population)
+                flag_fitness = True
+            except FileNotFoundError:
+                print(bcolors.FAIL + "[ERROR]:\tStarting fitness file not found: " + str(self.start_fitness_file) + bcolors.ENDC)
+                flag_fitness = False # technically not needed
+        if not flag_fitness: population, best_pop = self.fitness_func_wrap(population=population, f_path=self.experiment.cur_image_directory)
+
         total_time = self.recent_fitness_time + self.recent_tensor_time
 
         if self.debug > 1:  # print detailed method info
@@ -2109,26 +2273,40 @@ class Engine:
 
         return population, best_pop
 
+
     def write_pop_to_csv(self, fp=None):
         if self.can_save_log():
             genstr = "gen" + str(self.current_generation).zfill(5)
+            popstr = "pop" + str(self.current_generation).zfill(5)
             fn = self.experiment.generations_directory if fp is None else fp
+
+            fg = fn + genstr + ".csv"
+            fnp = fn + popstr + ".csv"
 
             # write engine summary
             self.summary(force_print=True, log_format=True, write_file=True,
-                         file_path=self.experiment.working_directory, file_name='state.log')
+                         file_path=self.experiment.working_directory,
+                         file_name='state.log',
+                         pop_path=fnp)
+
+            # save seed state
+            state = self.engine_rng.getstate()
+            #print("Kwargs seed state ", state)
+            state_fp = self.experiment.current_directory + save_seed_file
+            with open(state_fp, 'wb') as seed_file:
+                pickle.dump(state, seed_file)
 
             # write information of generation
-            fn += genstr + ".csv"
-            with open(fn, mode='w', newline='') as file:
-                fwriter = csv.writer(file, delimiter=',')
+            with open(fg, mode='w', newline='') as g_file, open(fnp, mode='w', newline='') as p_file:
+                g_fwriter = csv.writer(g_file, delimiter=',')
+                p_fwriter = csv.writer(p_file, delimiter = ',')
                 ind = 0
                 for p in self.population:
                     if ind == 0:
-                        file.write("individual number, individual name, fitness, depth, number nodes, expression\n")
-                    fwriter.writerow(
-                        [str(ind), genstr + "_indiv_" + str(ind).zfill(5), p['fitness'], p['depth'], p['nodes'],
-                         p['tree'].get_str()])
+                        g_file.write("individual_number,individual_name,fitness,depth,number_nodes,expression\n")
+                    g_fwriter.writerow(
+                        [str(ind), genstr + "_indiv_" + str(ind).zfill(5), p['fitness'], p['depth'], p['nodes']])
+                    p_fwriter.writerow([p['tree'].get_str()])
                     ind += 1
 
     def population_stats(self, population, fitness=True, depth=True, nodes=True):
@@ -2164,12 +2342,14 @@ class Engine:
         else:
             print(bcolors.FAIL + "[ERROR]:\tTo generate images from a population please enter either"
                                  " a file or a list with the corresponding expressions." + bcolors.ENDC)
-            return
+            return None
         index = 0
         for p in pop:
             t = p['tensor']
             save_image(t, index, fp, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
             index += 1
+        return tensors
+
 
     # and ((node_p1.value != 'scalar') or (node_p1.children == node_p2.children)):
 
@@ -2208,10 +2388,10 @@ class Engine:
         if (self.save_state == 0) or (len(self.population) == 0):
             start_from_last_pop = 0
 
+        #print(start_from_last_pop)
         # either generate initial pop randomly or read fromfile along with remaining experiment data
         self.data = []
 
-        # ===== start if =====
         if start_from_last_pop < self.population_size or self.save_state == 0:
             self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
@@ -2221,18 +2401,6 @@ class Engine:
                                                           method=self.method,
                                                           max_nodes=self.max_nodes,
                                                           read_from=self.pop_source)
-            """
-            if start_from_last_pop > 0:
-                if self.objective == 'minimizing':
-                    meta_elite = nsmallest(start_from_last_pop, self.population, key=itemgetter('fitness'))
-                    if meta_elite[0]['fitness'] < best['fitness']:
-                        best = meta_elite[0]
-                else:
-                    meta_elite = nlargest(start_from_last_pop, self.population, key=itemgetter('fitness'))
-                    if meta_elite[0]['fitness'] > best['fitness']:
-                        best = meta_elite[0]
-                population += meta_elite
-            """
 
             if start_from_last_pop > 0:
                 meta_elite = self.get_n_best_from_pop(population=self.population, n=start_from_last_pop)
@@ -2250,11 +2418,12 @@ class Engine:
             # print("tournament size: " + str(self.tournament_size))
 
             # save pop and bests
-            self.save_pop_and_bests(population=self.population)
+            self.save_pop_and_bests(population=self.population, first_save=True)
 
             # write first gen data
             self.write_pop_to_csv(self.pop_file_path)
             self.save_bests_log()
+
             if self.debug > 2:
                 self.summary(force_print=True)
 
@@ -2278,7 +2447,6 @@ class Engine:
 
             self.current_generation += 1
 
-        # ===== end if =====
 
         # Save engine state to file
         #self.save_engine_state()
@@ -2291,13 +2459,20 @@ class Engine:
             # TODO: immigrate individuals (archive)
 
             # Create new population of individuals
+
             new_population = self.get_n_best_from_pop(population=self.population, n=self.elitism)
+
+            #print_population(new_population, best=None, print_expr=True, msg="after new_pop")
 
             temp_population = []
             retrie_cnt = []
+
+            #print_population(self.population, best=self.best, print_expr=True, msg="before torunament"
+
             for current_individual in range(self.population_size - self.elitism):
 
                 rcnt = 0
+
                 if self.bloat_control == "off":
                     member_depth = float('inf')
 
@@ -2320,6 +2495,7 @@ class Engine:
                 temp_population.append(
                     new_individual(indiv_temp, fitness=0, depth=member_depth, nodes=member_nodes, valid=False,
                                    parents=plist))
+
                 if self.debug > 10: print("Individual " + str(indiv_temp) + ": " + indiv_temp.get_str())
 
             # Print average retrie count
@@ -2327,14 +2503,6 @@ class Engine:
                 rstd = np.average(np.array(retrie_cnt))
                 print("[DEBUG]:\tAverage evolutionary ops retries for generation " + str(
                     self.current_generation) + ": " + str(rstd))
-
-            # calculate fitness of the new population
-            #print("Evaluating ", str(len(temp_population)), " individuals in evolution gen.", str(self.current_generation))
-            temp_population, _ = self.fitness_func_wrap(population=temp_population, f_path=self.experiment.current_directory)
-
-            # force reevaluation of elite (for example when fitness func is dynamic)
-            if self.reeval_elite:
-                new_population, _ = self.fitness_func_wrap(population=new_population, f_path=self.experiment.current_directory)
 
             # bloat control:
             #
@@ -2350,13 +2518,31 @@ class Engine:
             #
             # https://www.researchgate.net/publication/220286086_Dynamic_limits_for_bloat_control_in_genetic_programming_and_a_review_of_past_and_current_bloat_theories
 
+
             if self.bloat_control == "off":
                 # for current_individual in range(self.population_size - self.elitism):
                 #    ind = temp_population[current_individual]
                 #    new_population.append(ind)
-                new_population += temp_population
+
+                if self.reeval_elite:
+                    new_population += temp_population
+                    if len(new_population) > 0:
+                        new_population, _ = self.fitness_func_wrap(population=new_population, f_path=self.experiment.current_directory)
+                else:
+                    if len(temp_population) > 0:
+                        temp_population, _ = self.fitness_func_wrap(population=temp_population, f_path=self.experiment.current_directory)
+                    new_population += temp_population
 
             else:
+
+                if len(temp_population) > 0:
+                    temp_population, _ = self.fitness_func_wrap(population=temp_population, f_path=self.experiment.current_directory)
+
+                # force reevaluation of elite (for example when fitness func is dynamic)
+                if self.reeval_elite and len(new_population) > 0:
+                    new_population, _ = self.fitness_func_wrap(population=new_population, f_path=self.experiment.current_directory)
+
+
                 accepted = 0
                 depth_mode = self.bloat_mode == 'depth'
                 best_fit = self.best_overall['fitness']
@@ -2424,14 +2610,13 @@ class Engine:
                         illegals += 1
 
 
-
-
-
             # update population
             self.population = new_population
 
             # update best gen and overall
             self.best = self.get_n_best_from_pop(population=self.population, n=1)[0]
+            #print_population([self.best], best=None, print_expr=True, msg="saving best")
+
             if self.condition_overall(self.best['fitness']):
                 self.best_overall = self.deep_shallow_copy(self.best)
 
@@ -2516,6 +2701,7 @@ class Engine:
         tensors = [p['tensor'] for p in self.population]
         return self.data, tensors
 
+
     def set_polar_mask_value(self):
         if self.do_polar_mask:
             polar_mask_value = self.polar_mask_value
@@ -2545,6 +2731,7 @@ class Engine:
                     self.polar_mask_value = tf.cast(tt.get_tensor(self), tf.float32)
                 self.polar_mask_value_expr = mask_expr
 
+
     def selection(self):
         parent = self.tournament_selection()
         plist = []
@@ -2562,14 +2749,8 @@ class Engine:
         if random_n2 < self.mutation_rate:
             indiv_temp = self.mutation(parent['tree'])
 
-        # if indiv_temp
-        # print("mut")
-        # if random_n1 >= self.crossover_rate and random_n2 >= self.crossover_rate:
-        # indiv_temp = parent['tree']
-        # print("repro")
-        # print("Indiv temp dep: ", indiv_temp.get_depth(), " with str: ", indiv_temp.get_str())
-
         return indiv_temp, parent, plist
+
 
     def get_n_best_from_pop(self, population, n):
         if self.objective == 'minimizing':
@@ -2578,7 +2759,8 @@ class Engine:
             elite = nlargest(n, population, key=itemgetter('fitness'))
         return elite
 
-    def save_pop_and_bests(self, population):
+
+    def save_pop_and_bests(self, population, first_save=False):
         if self.can_save_image_best():
             # Save Best Image
             fn = self.experiment.bests_directory + "best_gen" + str(self.current_generation).zfill(5)
@@ -2592,6 +2774,17 @@ class Engine:
                     fn = self.experiment.cur_image_directory + "gen" + str(self.current_generation).zfill(5)
                     save_image(population[i]['tensor'], i, fn, self.target_dims, BGR=self.do_bgr,
                                extension=self.image_extension)
+
+                # Launch interface
+                if first_save and self.interface:
+                    print("We launching interface on no!")
+                    cmd_list = ["processing-java", "--sketch=" + os.getcwd() + _tgp_delimiter + "evolver" + _tgp_delimiter, "--run", self.experiment.all_directory]
+                    subprocess.Popen(cmd_list)
+
+                # Remove file if it exists
+                if os.path.exists(self.flag_file):
+                    os.remove(self.flag_file)
+
 
     def graph_statistics(self, extension=".pdf"):
 
@@ -2660,6 +2853,7 @@ class Engine:
         if self.show_graphics: plt.show()
         plt.close(fig)
 
+
     def write_overall_to_csv(self, data):
         # evolutionary stats across generations
         fn = (
@@ -2670,10 +2864,10 @@ class Engine:
             for d in data:
                 if ind == 0 and self.save_state == 0:
                     file.write(
-                        "generation, fitness avg, fitness std, fitness generational best, fitness overall best," \
-                        "depth avg, depth std, depth generational best, depth overall best," \
-                        "node avg, node std, node generational best, node overall best," \
-                        "generation time, fitness time, tensor time\n")
+                        "generation,fitness_avg,fitness_std,fitness_generational_best,fitness_overall_best," \
+                        "depth_avg,depth_std,depth_generational_best,depth_overall_best," \
+                        "node_avg,node_std,node_generational_best,node_overall_best," \
+                        "generation_time,fitness_time,tensor_time\n")
                 fwriter.writerow(d)
                 ind += 1
 
@@ -2682,7 +2876,7 @@ class Engine:
         with open(fn, mode='a', newline='') as file:
             fwriter = csv.writer(file, delimiter=',')
             if self.save_state == 0:
-                file.write("resolution, seed, initialization time, tensor time, fitness time, total, engine time\n")
+                file.write("resolution,seed,initialization_time,tensor_time,fitness_time,total,engine_time\n")
             fwriter.writerow([self.target_dims[0], self.experiment.seed, self.elapsed_init_time,
                               self.elapsed_tensor_time, self.elapsed_fitness_time, self.elapsed_engine_time])
 
@@ -2706,7 +2900,7 @@ class Engine:
         if self.save_bests:
             with open(self.experiment.bests_fp, "a") as csv_file:
                 try:
-                    if self.current_generation == 0: csv_file.write("generation, index, expression\n")
+                    if self.current_generation == 0: csv_file.write("generation,index,expression\n")
                     writer = csv.writer(csv_file)
                     writer.writerow([self.current_generation, self.best['fitness'], self.best['tree'].get_str()])
                 except IOError as error:
@@ -2716,7 +2910,7 @@ class Engine:
         if self.save_bests_overall:
             with open(self.experiment.bests_overall_fp, "a") as csv_file:
                 try:
-                    if self.current_generation == 0: csv_file.write("generation, index, expression\n")
+                    if self.current_generation == 0: csv_file.write("generation,index,expression\n")
                     writer = csv.writer(csv_file)
                     writer.writerow(
                         [self.current_generation, self.best_overall['fitness'], self.best_overall['tree'].get_str()])
@@ -2794,7 +2988,6 @@ class Function_Set:
             'if': [3, resolve_if_node],
             'len': [2, resolve_len_node],
             'lerp': [3, resolve_lerp_node],
-            # 'lerpp': [3, resolve_lerp_node],
             'log': [1, resolve_log_node],
             'max': [2, resolve_max_node],
             'mdist': [2, resolve_mdist_node],
@@ -2925,8 +3118,8 @@ class Terminal_Set:
                 y = self.set['y']
                 y = y * - 1
                 xy_dist = x ** 2 + y ** 2
-                self.set['x'] = tf.math.abs(tf.math.atan2(x, y))
-                self.set['y'] = tf.math.sqrt(xy_dist)
+                self.set['x'] = tf.math.atan2(x, y) / math.pi
+                self.set['y'] = tf.math.sqrt(xy_dist) * 2 - 1
                 if self.engref.do_polar_mask:
                     self.engref.polar_mask = tf.where(xy_dist > 1, 0, 1)
         else:
@@ -2974,14 +3167,9 @@ class Terminal_Set:
             else:
                 _, tree = str_to_tree(t, self.set)
                 tensor = tree.get_tensor(engref)
-        elif hasattr(type(t), "__module__") and type(t).__module__ == 'numpy':
-            #print("ldsfvj")
-            tensor = tf.convert_to_tensor(t, dtype=_tf_type)
+        elif hasattr(t, "__module__") and type(t).__module__ == 'numpy':
+            tensor = tf.convert_to_tensor(t)
         else:
-            #val1 = 'numpy' == type(t).__module__
-            #val2 = hasattr(type(t), "__module__")
-            #print(val1)
-            #print(val2)
             tensor = t
 
         self.set[name] = tensor
