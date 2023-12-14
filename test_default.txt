@@ -1,0 +1,13 @@
+x
+y
+scalar(-1.0, -1.0, -1.0)
+scalar(1.0, 1.0, 1.0)
+scalar(1.0, -1.0, -1.0)
+scalar(-1.0, 1.0, -1.0)
+scalar(-1.0, -1.0, 1.0)
+scalar(0.0)
+sub(scalar(0.1), scalar(0.1))
+scalar(-0.8, -0.6, -0.6)
+mult(x, y)
+sub(scalar(0.0), x)
+add(x, x)

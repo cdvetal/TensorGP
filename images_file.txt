@@ -1,0 +1,25 @@
+x
+y
+scalar(0.0, 0.0, 0.0)
+scalar(1.0, 1.0, 1.0)
+scalar(1.0, 0.0, 0.0)
+scalar(0.0, 1.0, 0.0)
+scalar(0.0, 0.0, 1.0)
+black
+white
+red
+green
+blue
+add(red, blue)
+add(add(red, green), blue)
+sub(sub(sub(white, red), green), blue)
+mult(add(white, black), scalar(0.5))
+scalar(0.5)
+mult(scalar(0.1, 0.1, 0.1), scalar(5.0))
+div(white, scalar(2.0))
+scalar(0.1, 0.25)
+mult(scalar(0.1, 0.25), scalar(5.0, 2.0))
+div(scalar(0.1, 0.25), scalar(0.2, 0.5))
+mult(x, y)
+sub(scalar(0.0), x)
+add(x, x)
