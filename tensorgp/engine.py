@@ -34,7 +34,6 @@ import math
 import os
 import re
 
-import keyboard as keyboard
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -394,11 +393,6 @@ class Node:
 
 ## ====================== Utility methods ====================== ##
 
-def interactive_pause(key_str='space'):
-    while True:
-        if keyboard.read_key() == key_str:
-            break
-
 def constrain(a, n, b):
     return min(max(n, a), b)
 
@@ -491,7 +485,7 @@ def str_to_tree_normal(stree, terminal_set, number_nodes=0, constrain_domain=Tru
         return number_nodes + 1, Node(value=primitive, terminal=False, children=children)
 
 def set_device(device = 'gpu', debug_lvl = 1):
-    cuda_build = torch.has_cuda
+    cuda_build = torch.backends.cuda.is_built()
     gpus_available = []
     if cuda_build:
         cuda_build = cuda_build and torch.cuda.is_available()
@@ -1223,6 +1217,7 @@ class Engine:
 
                  save_log=True,
                  write_engine_state=True,
+                 no_disk=False,
 
                  last_init_time=None,
                  last_fitness_time=None,
@@ -1340,21 +1335,6 @@ class Engine:
         self.initial_test_device = initial_test_device
         self.device = set_device(device=device) if self.initial_test_device else device  # Check for available devices
 
-        self.fixed_path = fixed_path
-        self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix), fixed=self.fixed_path, best_overall_dir=best_overall_dir)
-        self.flag_file =  self.experiment.all_directory + "_flag_to_evolve"
-        self.interface = interface
-        self.active_interface = False
-
-        # self.engine_rng = random.Random(self.experiment.seed) if seed_state is None else random.Random().setstate(seed_state)
-        # random.Random().setstate(seed_state) does not work
-        self.engine_rng = random.Random(self.experiment.seed)
-        if seed_state is not None:
-            self.engine_rng.setstate(seed_state)
-
-        #print("setting seed state: ", seed_state)
-        #print("Type of engine RNG: ", type(self.engine_rng))
-
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
         self.image_extension = '.' + (image_extension if (image_extension in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
@@ -1364,12 +1344,50 @@ class Engine:
         self.pop_source = read_init_pop_from_file if read_init_pop_from_file is not None else read_init_pop_from_source
         self.start_fitness_file = start_fitness_file
         self.reeval_fitness_start = reeval_fitness_start
-        self.save_log = save_log
-        self.write_engine_state = write_engine_state
-        self.save_image_best = save_image_best
-        self.save_bests = save_bests
-        self.save_bests_overall = save_bests_overall
-        self.save_image_pop = save_image_pop
+        self.seed = seed
+
+
+        self.no_disk = no_disk
+        if no_disk:
+            self.save_to_file = False
+            self.save_to_file_image = False
+            self.save_to_file_log = False
+            self.save_to_file_state = False
+            self.save_log = False
+            self.write_engine_state = False
+            self.save_image_best = False
+            self.save_bests = False
+            self.save_bests_overall = False
+            self.save_image_pop = False
+            self.interface = []
+            self.fixed_path = []
+            self.experiment = []
+        else:
+            self.save_log = save_log
+            self.write_engine_state = write_engine_state
+            self.save_image_best = save_image_best
+            self.save_bests = save_bests
+            self.save_bests_overall = save_bests_overall
+            self.save_image_pop = save_image_pop
+
+            self.fixed_path = fixed_path
+            self.experiment = Experiment(seed=seed, wd=self.run_dir_path, addon=str(exp_prefix), fixed=self.fixed_path,
+                                         best_overall_dir=best_overall_dir)
+            self.flag_file = self.experiment.all_directory + "_flag_to_evolve"
+            self.interface = interface
+
+
+        self.active_interface = False # it's here because of the feednplay
+
+        # self.engine_rng = random.Random(self.seed) if seed_state is None else random.Random().setstate(seed_state)
+        # random.Random().setstate(seed_state) does not work
+        print(self.seed)
+        self.engine_rng = random.Random(self.seed)
+
+        if seed_state is not None:
+            self.engine_rng.setstate(seed_state)
+
+
         self.save_state = 0
         self.last_stop = 0
 
@@ -1498,7 +1516,7 @@ class Engine:
         # update timers
         self.elapsed_init_time += time.time() - start_init
         if self.debug > 0: print("Elapsed init time: ", self.elapsed_init_time)
-        print(bcolors.OKGREEN + "Engine seed:" + str(self.experiment.seed) + bcolors.ENDC)
+        print(bcolors.OKGREEN + "Engine seed:" + str(self.seed) + bcolors.ENDC)
         self.update_engine_time()
 
         self.population = []
@@ -1553,7 +1571,7 @@ class Engine:
             if not log_format: summary_str += "Fitness function: " + get_func_name(self.fitness_func) + "\n"
             summary_str += ("_current_generation = " if log_format else "Current generation: ") + str(
                 self.current_generation) + "\n"
-            summary_str += ("seed = " if log_format else "Seed: ") + str(self.experiment.seed) + "\n"
+            summary_str += ("seed = " if log_format else "Seed: ") + str(self.seed) + "\n"
             if not self.condition() and not log_format: summary_str += "The run is over!\n"
             summary_str += ("population_size = " if log_format else "Population size: ") + str(
                 self.population_size) + "\n"
@@ -1756,7 +1774,7 @@ class Engine:
 
         if log_format: summary_str += "_last_engine_time = " + str(self.last_engine_time) + "\n"
 
-        summary_str += ("_work_dir = " if log_format else "Working directory: ") + str(self.experiment.working_directory) + "\n"
+        if not self.no_disk: summary_str += ("_work_dir = " if log_format else "Working directory: ") + str(self.experiment.working_directory) + "\n"
 
         if pop_path is not None:
             summary_str += ("_last_pop = " if log_format else "Current generation: ") + str(pop_path) + "\n"
@@ -1775,11 +1793,11 @@ class Engine:
             summary_str += ("start_fitness_file = " if log_format else "Starting Fitness File: ") + str(
                 self.start_fitness_file) + "\n"
 
-        if (experiment or force_print) and not log_format:
+        if (experiment or force_print) and not (not self.no_disk) and (not log_format):
             summary_str += "\n############# Experiment Information #############\n"
             summary_str += self.experiment.summary()
 
-        if write_file:
+        if write_file and (not self.no_disk):
             fn = self.experiment.working_directory if file_path is None else file_path
             fn += file_name
             with open(fn, "w") as text_file:
@@ -2011,7 +2029,7 @@ class Engine:
         return self.domain_mapping(final_tensor)
 
 
-    def fitness_func_wrap(self, population, f_path):
+    def fitness_func_wrap(self, population, f_path=None):
 
         # calculate tensors
         if self.debug > 4: print("\nEvaluating generation: " + str(self.current_generation))
@@ -2020,10 +2038,10 @@ class Engine:
         if self.debug > 4: print("Calculated " + str(len(population)) + " tensors in (s): " + str(time_taken))
 
         # save pop and bests
-        self.save_pop(population=population)
+        # self.save_pop(population=population)
 
         # launch interface
-        self.launch_interface()
+        # self.launch_interface() # feednplay
 
         # calculate fitness
         if self.debug > 4: print("Assessing fitness of individuals...")
@@ -2031,12 +2049,20 @@ class Engine:
 
         # Notes: measuring time should not be up to the fit function writer. We should provide as much info as possible
         # Maybe best pop shouldn't be required
+        if self.no_disk:
+            w_dir = ""
+            f_path = ""
+        else:
+            w_dir = self.experiment.working_directory
+            if f_path is None:
+                f_path = self.experiment.current_directory
+
         population, best_ind = self.fitness_func(generation=self.current_generation,
                                                  population=population,
                                                  tensors=tensors,
                                                  f_path=f_path,
                                                  image_extension=self.image_extension,
-                                                 work_dir = self.experiment.working_directory,
+                                                 work_dir = w_dir,
                                                  polar_mask=self.polar_mask,
                                                  rng=self.engine_rng,
                                                  objective=self.objective,
@@ -2184,7 +2210,7 @@ class Engine:
             except FileNotFoundError:
                 print(bcolors.FAIL + "[ERROR]:\tStarting fitness file not found: " + str(self.start_fitness_file) + bcolors.ENDC)
                 flag_fitness = False # technically not needed
-        if not flag_fitness: population, best_pop = self.fitness_func_wrap(population=population, f_path=self.experiment.cur_image_directory)
+        if not flag_fitness: population, best_pop = self.fitness_func_wrap(population=population)
 
 
         total_time = self.recent_fitness_time + self.recent_tensor_time
@@ -2206,7 +2232,7 @@ class Engine:
 
 
     def write_pop_to_csv(self, fp=None):
-        if self.can_save_log():
+        if self.can_save_log() and not self.no_disk:
             genstr = "gen" + str(self.current_generation).zfill(5)
             popstr = "pop" + str(self.current_generation).zfill(5)
             fn = self.experiment.generations_directory if fp is None else fp
@@ -2324,7 +2350,8 @@ class Engine:
         self.data = []
 
         if start_from_last_pop < self.population_size or self.save_state == 0:
-            self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
+            if not self.no_disk:
+                self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
             population, best = self.initialize_population(max_depth=self.max_init_depth,
                                                           min_depth=self.min_init_depth,
@@ -2386,7 +2413,8 @@ class Engine:
         while self.condition():
 
             # Set directory to save engine state in this generation
-            self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
+            if not self.no_disk:
+                self.experiment.set_generation_directory(self.current_generation, self.can_save_image_pop)
 
             # TODO: immigrate individuals (archive)
 
@@ -2457,20 +2485,20 @@ class Engine:
                 if self.reeval_elite:
                     new_population += temp_population
                     if len(new_population) > 0:
-                        new_population, _ = self.fitness_func_wrap(population=new_population, f_path=self.experiment.current_directory)
+                        new_population, _ = self.fitness_func_wrap(population=new_population)
                 else:
                     if len(temp_population) > 0:
-                        temp_population, _ = self.fitness_func_wrap(population=temp_population, f_path=self.experiment.current_directory)
+                        temp_population, _ = self.fitness_func_wrap(population=temp_population)
                     new_population += temp_population
 
             else:
 
                 if len(temp_population) > 0:
-                    temp_population, _ = self.fitness_func_wrap(population=temp_population, f_path=self.experiment.current_directory)
+                    temp_population, _ = self.fitness_func_wrap(population=temp_population)
 
                 # force reevaluation of elite (for example when fitness func is dynamic)
                 if self.reeval_elite and len(new_population) > 0:
-                    new_population, _ = self.fitness_func_wrap(population=new_population, f_path=self.experiment.current_directory)
+                    new_population, _ = self.fitness_func_wrap(population=new_population)
 
 
                 accepted = 0
@@ -2588,7 +2616,7 @@ class Engine:
 
             # advance generation
             self.current_generation += 1
-            #self.experiment.seed += 1
+            #self.seed += 1
 
             # save engine state
             # if self.save_to_file != 0 and (self.current_generation % self.save_to_file) == 0:
@@ -2729,19 +2757,19 @@ class Engine:
         std_dep = []
         best_dep = []
         lcnt = 1
-
-        with open(self.experiment.overall_fp, mode='r') as csv_file:
-            csv_reader = csv.reader(csv_file)
-            for row in csv_reader:
-                if self.debug > 10: print(row)
-                if line_start <= lcnt < line_end:
-                    avg_fit.append(float(row[1]))
-                    std_fit.append(float(row[2]))
-                    best_fit.append(float(row[4]))  # overall
-                    avg_dep.append(float(row[5]))
-                    std_dep.append(float(row[6]))
-                    best_dep.append(float(row[8]))  # overall
-                lcnt += 1
+        if not self.no_disk:
+            with open(self.experiment.overall_fp, mode='r') as csv_file:
+                csv_reader = csv.reader(csv_file)
+                for row in csv_reader:
+                    if self.debug > 10: print(row)
+                    if line_start <= lcnt < line_end:
+                        avg_fit.append(float(row[1]))
+                        std_fit.append(float(row[2]))
+                        best_fit.append(float(row[4]))  # overall
+                        avg_dep.append(float(row[5]))
+                        std_dep.append(float(row[6]))
+                        best_dep.append(float(row[8]))  # overall
+                    lcnt += 1
 
         # showing best overall
         fig, ax = plt.subplots(1, 1)
@@ -2757,8 +2785,7 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Fitness across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(fname=self.experiment.graphs_directory + 'Fitness_ ' + self.experiment.filename + '.' + extension,
-                    format=extension)
+        if not self.no_disk: plt.savefig(fname=self.experiment.graphs_directory + 'Fitness_ ' + self.experiment.filename + '.' + extension, format=extension)
         if self.show_graphics: plt.show()
         plt.close(fig)
 
@@ -2772,37 +2799,37 @@ class Engine:
         ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
         ax.set_title('Avg depth across generations')
         fig.set_size_inches(12, 8)
-        plt.savefig(fname=self.experiment.graphs_directory + 'Depth_' + self.experiment.filename + '.' + extension,
-                    format=extension)
+        if not self.no_disk:  plt.savefig(fname=self.experiment.graphs_directory + 'Depth_' + self.experiment.filename + '.' + extension, format=extension)
         if self.show_graphics: plt.show()
         plt.close(fig)
 
 
     def write_overall_to_csv(self, data):
-        # evolutionary stats across generations
-        fn = (
-                self.experiment.working_directory + "evolution_" + self.experiment.filename + ".csv") if self.experiment.overall_fp is None else self.experiment.overall_fp
-        with open(fn, mode='a', newline='') as file:
-            fwriter = csv.writer(file, delimiter=',')
-            ind = 0
-            for d in data:
-                if ind == 0 and self.save_state == 0:
-                    file.write(
-                        "generation,fitness_avg,fitness_std,fitness_generational_best,fitness_overall_best," \
-                        "depth_avg,depth_std,depth_generational_best,depth_overall_best," \
-                        "node_avg,node_std,node_generational_best,node_overall_best," \
-                        "generation_time,fitness_time,tensor_time\n")
-                fwriter.writerow(d)
-                ind += 1
+        if self.can_save_log() and not self.no_disk:
+            # evolutionary stats across generations
+            fn = (
+                    self.experiment.working_directory + "evolution_" + self.experiment.filename + ".csv") if self.experiment.overall_fp is None else self.experiment.overall_fp
+            with open(fn, mode='a', newline='') as file:
+                fwriter = csv.writer(file, delimiter=',')
+                ind = 0
+                for d in data:
+                    if ind == 0 and self.save_state == 0:
+                        file.write(
+                            "generation,fitness_avg,fitness_std,fitness_generational_best,fitness_overall_best," \
+                            "depth_avg,depth_std,depth_generational_best,depth_overall_best," \
+                            "node_avg,node_std,node_generational_best,node_overall_best," \
+                            "generation_time,fitness_time,tensor_time\n")
+                    fwriter.writerow(d)
+                    ind += 1
 
-        fn = (
-                self.experiment.working_directory + "timings_" + self.experiment.filename + ".csv") if self.experiment.timings_fp is None else self.experiment.timings_fp
-        with open(fn, mode='a', newline='') as file:
-            fwriter = csv.writer(file, delimiter=',')
-            if self.save_state == 0:
-                file.write("resolution,seed,initialization_time,tensor_time,fitness_time,total,engine_time\n")
-            fwriter.writerow([self.target_dims[0], self.experiment.seed, self.elapsed_init_time,
-                              self.elapsed_tensor_time, self.elapsed_fitness_time, self.elapsed_engine_time])
+            fn = (
+                    self.experiment.working_directory + "timings_" + self.experiment.filename + ".csv") if self.experiment.timings_fp is None else self.experiment.timings_fp
+            with open(fn, mode='a', newline='') as file:
+                fwriter = csv.writer(file, delimiter=',')
+                if self.save_state == 0:
+                    file.write("resolution,seed,initialization_time,tensor_time,fitness_time,total,engine_time\n")
+                fwriter.writerow([self.target_dims[0], self.seed, self.elapsed_init_time,
+                                  self.elapsed_tensor_time, self.elapsed_fitness_time, self.elapsed_engine_time])
 
     def update_engine_time(self):
         t_ = time.time()
@@ -2861,7 +2888,7 @@ class Engine:
             if not self.condition(): print("The run is over!")
 
             print("\nGeneral Info:")
-            print("Engine Seed:\t" + str(self.experiment.seed))
+            print("Engine Seed:\t" + str(self.seed))
             print("Engine ID:\t" + str(self.experiment.ID))
             print("Generation:\t" + str(self.current_generation))
 
