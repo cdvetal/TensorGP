@@ -2747,7 +2747,7 @@ class Engine:
             indiv_temp = self.crossover(parent['tree'], parent_2['tree'])
             # print("cross")
         if random_n2 < self.mutation_rate:
-            indiv_temp = self.mutation(parent['tree'])
+            indiv_temp = self.mutation(indiv_temp)
 
         return indiv_temp, parent, plist
 
