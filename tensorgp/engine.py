@@ -34,7 +34,6 @@ import math
 import os
 import re
 
-import keyboard as keyboard
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -331,7 +330,7 @@ def old_tf_rmse(child1, child2):
 
 # The idea is that this is always the same, so compile
 @tf.function
-def tf_rmse(child1, child2):
+def tensor_rmse(child1, child2):
     child1 = tf.scalar_mul(1 / 127.5, child1)
     child2 = tf.scalar_mul(1 / 127.5, child2)
     return tf.sqrt(tf.reduce_mean(tf.square(child1 - child2)))
@@ -473,11 +472,6 @@ class Node:
 
 
 ## ====================== Utility methods ====================== ##
-
-def interactive_pause(key_str='space'):
-    while True:
-        if keyboard.read_key() == key_str:
-            break
 
 def constrain(a, n, b):
     return min(max(n, a), b)
@@ -2747,7 +2741,7 @@ class Engine:
             indiv_temp = self.crossover(parent['tree'], parent_2['tree'])
             # print("cross")
         if random_n2 < self.mutation_rate:
-            indiv_temp = self.mutation(indiv_temp)
+            indiv_temp = self.mutation(parent['tree'])
 
         return indiv_temp, parent, plist
 
