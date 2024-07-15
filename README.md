@@ -1,7 +1,8 @@
 # TensorGP
 **A data parallel approach to Genetic Programming**
 
-TensorGP is a general-purpose Genetic Programming engine that uses TensorFlow with Python to accelerate fitness evaluation through operator vectorization.
+TensorGP is a general-purpose Genetic Programming engine that accelerates fitness evaluation through operator vectorization.
+
 
 Even though this framework was designed with speed and efficiency in mind, the simplistic design and flexibility allow for the quick prototyping of controlled environments and experimental setups.
 
@@ -17,6 +18,23 @@ You can use the [pip](https://pip.pypa.io/en/stable/) package manager to install
 ```bash
 pip install -r requirements.txt
 ```
+
+Alternatively, you can use the premade PyPI packages:
+
+```bash
+pip install tensorgp-tf
+```
+which installs the main version of TensorGP using the TensorFlow library.
+Or
+
+```bash
+pip install tensorgp
+```
+
+which install the version of the engine that uses PyTorch.
+If you run across GPU issues with this version, please use the "tensorgp-tf" package, which is more stable.
+
+Warning: If you opt to install through the PyPI packages be mindful that you will have to remove the engine imports in the examples provided in this repo.
 
 ## Getting Started
 
