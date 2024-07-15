@@ -8,6 +8,8 @@ Even though this framework was designed with speed and efficiency in mind, the s
 
 ## Installation
 
+### Method 1 - Standard Import
+
 Import the engine with:
 
 ```python
@@ -18,6 +20,8 @@ You can use the [pip](https://pip.pypa.io/en/stable/) package manager to install
 ```bash
 pip install -r requirements.txt
 ```
+
+### Method 2 - PyPI package
 
 Alternatively, you can use the premade PyPI packages:
 
@@ -31,10 +35,10 @@ Or
 pip install tensorgp
 ```
 
-which install the version of the engine that uses PyTorch.
+which installs the version of the engine that uses PyTorch.
 If you run across GPU issues with this version, please use the "tensorgp-tf" package, which is more stable.
 
-Warning: If you opt to install through the PyPI packages be mindful that you will have to remove the engine imports in the examples provided in this repo.
+*Note*: If you opt to install through the PyPI packages be mindful that you will have to remove the engine imports in the examples provided in this repo.
 
 ## Getting Started
 
