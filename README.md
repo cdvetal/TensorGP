@@ -36,7 +36,7 @@ pip install tensorgp
 ```
 
 which installs the version of the engine that uses PyTorch.
-If you run across GPU issues with this version, please use the "tensorgp-tf" package, which is more stable.
+If you run across GPU issues with this last package, please use the "tensorgp-tf" package.
 
 *Note*: If you opt to install through the PyPI packages be mindful that you will have to remove the engine imports in the examples provided in this repo.
 
