@@ -1,9 +1,9 @@
 # MIT License
 
-# Copyright (c) 2020-2022 Francisco Baeta (University of Coimbra)
-# Copyright (c) 2020-2022 João Correia (University of Coimbra)
-# Copyright (c) 2020-2022 Tiago Martins (University of Coimbra)
-# Copyright (c) 2020-2022 Penousal Machado (University of Coimbra)
+# Copyright (c) 2020-present Francisco Baeta (University of Coimbra)
+# Copyright (c) 2020-present João Correia (University of Coimbra)
+# Copyright (c) 2020-present Tiago Martins (University of Coimbra)
+# Copyright (c) 2020-present Penousal Machado (University of Coimbra)
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
