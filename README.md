@@ -3,8 +3,10 @@
 
 TensorGP is a general-purpose Genetic Programming engine that accelerates fitness evaluation through operator vectorization.
 
-
 Even though this framework was designed with speed and efficiency in mind, the simplistic design and flexibility allow for the quick prototyping of controlled environments and experimental setups.
+
+[Read More:](https://cdv.dei.uc.pt/projects/tensorgp)
+
 
 ## Installation
 
