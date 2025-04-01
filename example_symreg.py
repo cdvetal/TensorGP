@@ -1,4 +1,4 @@
-from tensorgp.engine import *
+from tensorgp.engine_pytorch_1 import *
 
 # Fitness function to calculate RMSE from target (Pagie Polynomial)
 def calc_fit(**kwargs):
@@ -49,13 +49,14 @@ if __name__ == "__main__":
 
     # GP params
     dev = 'cuda'
-    gens = 49  # 50
+    gens = 10  # 50
     pop_size = 50  # 50
     tour_size = 3
     mut_rate = 0.1
     cross_rate = 0.9
-    max_tree_dep = 10
+    max_tree_dep = 12
     max_init_depth = 10
+    min_init_depth = 5
     elite_size = 1 # 0 to turn off
     runs = 1 # Number of average runs
 
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     problems = [pagie]  # Add to run more problems
 
     # Domains dimensions
-    test_cases = [[64, 64]]
+    test_cases = [[1024, 1024]]
 
     for p in problems:
 
@@ -87,15 +88,18 @@ if __name__ == "__main__":
                                 max_tree_depth=max_tree_dep,
                                 target_dims=res,
                                 target=pagie,
-                                #elitism=elite_size,
+                                elitism=elite_size,
                                 method='ramped half-and-half',
                                 max_init_depth=max_init_depth,
+                                exp_prefix="experience_name",
                                 objective='minimizing',
                                 device=dev,
                                 stop_criteria='generation',
                                 stop_value=gens,
                                 effective_dims=2,
+                                do_final_transform=True,
                                 domain=[-5, 5],
+                                codomain=[-5, 5],
                                 operators=normal_set,
                                 seed=seeds,
                                 save_to_file=10,
