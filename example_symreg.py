@@ -1,4 +1,4 @@
-from tensorgp.engine_pytorch_1 import *
+from tensorgp.engine import *
 
 # Fitness function to calculate RMSE from target (Pagie Polynomial)
 def calc_fit(**kwargs):
