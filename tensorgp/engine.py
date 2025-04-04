@@ -493,6 +493,7 @@ def set_device(device = 'gpu', debug_lvl = 1):
 
     # because these won't give an error but will be unspecified
     if (device is None) or (device == '') or (device == ':'):
+
         device = 'cpu'
         torch.set_default_device('cpu')
     try:
@@ -505,7 +506,14 @@ def set_device(device = 'gpu', debug_lvl = 1):
                 print(bcolors.OKGREEN + "Device " + result_device.__str__() + " successfully tested, using this device. " , bcolors.ENDC)
             else:
                 print(bcolors.FAIL + "Device " + result_device.__str__() + " not working." , bcolors.ENDC)
-        torch.set_default_device('cuda')
+
+        # Set default device
+        torch.set_default_device(result_device)
+
+        global cur_dev
+        cur_dev = result_device
+
+
     except RuntimeError or ValueError:
         if cuda_build and gpus_available > 0:
             result_device = 'cuda'
@@ -1335,6 +1343,7 @@ class Engine:
         self.initial_test_device = initial_test_device
         self.device = set_device(device=device) if self.initial_test_device else device  # Check for available devices
 
+
         self.method = method if (method in ['ramped half-and-half', 'grow', 'full']) else 'ramped half-and-half'
         self.replace_mode = replace_mode if replace_mode == 'dynamic_arities' else 'same_arity'
         self.image_extension = '.' + (image_extension if (image_extension in ['png', 'jpeg', 'bmp', 'jpg']) else 'png')
@@ -1386,6 +1395,9 @@ class Engine:
 
         if seed_state is not None:
             self.engine_rng.setstate(seed_state)
+
+
+
 
 
         self.save_state = 0
@@ -1981,8 +1993,7 @@ class Engine:
     def domain_mapping(self, tensor):
         final_tensor = torch.where(torch.isnan(tensor), torch.tensor(_domain[0], dtype=dtype, device=cur_dev), tensor)
         final_tensor = torch.clip(final_tensor, min=torch_dtype_min, max=torch_dtype_max)
-        # ".cuda()" is "temporary fix
-        final_tensor = self.codomain_range(final_tensor).cuda()
+        final_tensor = self.codomain_range(final_tensor)
 
         if self.do_polar_mask:
             final_tensor = torch.where(self.polar_mask == 1, final_tensor, self.polar_mask_value)
