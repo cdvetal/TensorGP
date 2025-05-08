@@ -1212,6 +1212,7 @@ class Engine:
 
                  exp_prefix='',
                  device='/cpu:0',
+                 initial_test_device=True,
                  do_bgr=False,
                  interface=False,
 
@@ -1234,7 +1235,6 @@ class Engine:
                  tf_type=torch.float32,
 
                  color_print=True,
-                 initial_test_device=True,
                  var_func=None, #
                  reeval_elite = False,
                  best_overall_dir = False,
@@ -2294,7 +2294,7 @@ class Engine:
             res[k] = [_avg, _std, _best, _best_all]
         return res
 
-    def generate_pop_images(self, expressions, fpath=None):
+    def generate_pop_images(self, expressions, save_images=True, fpath=None):
         fp = self.experiment.current_directory if fpath is None else fpath
 
         if isinstance(expressions, str):
@@ -2311,11 +2311,10 @@ class Engine:
             print(bcolors.FAIL + "[ERROR]:\tTo generate images from a population please enter either"
                                  " a file or a list with the corresponding expressions." + bcolors.ENDC)
             return None
-        index = 0
-        for p in pop:
-            t = p['tensor']
-            save_image(t, index, fp, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
-            index += 1
+        if save_images:
+            for index, p in enumerate(pop):
+                t = p['tensor']
+                save_image(t, index, fp, self.target_dims, BGR=self.do_bgr, extension=self.image_extension)
         return tensors
 
 
